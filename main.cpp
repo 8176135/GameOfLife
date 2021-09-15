@@ -1,5 +1,9 @@
+#include "main.h"
+
+#include <cmath>
 #include <iostream>
 #include <sstream>
+#include <chrono>
 #include "glad/glad.h"
 #include "GLFW/glfw3.h"
 
@@ -9,25 +13,29 @@
 #include "shader.h"
 #include "LifeExecutor.h"
 #include "CustomGlfwTimer.h"
+#include "RenderWindow.h"
 
 struct CallbackContext {
-	uint8_t *textureDataArray;
+	std::vector<uint8_t> textureDataArray;
 	LifeExecutor lifeExecutor;
 	bool currentlyPlaying;
+	RenderWindow renderWindow;
+	Vector2 movement;
 };
 
 CallbackContext *get_context(GLFWwindow *w) {
 	return static_cast<CallbackContext *>(glfwGetWindowUserPointer(w));
 }
 
-const int BOX_RESOLUTION = 64;
-
 static void setLife(CallbackContext &context, double xpos, double ypos, bool newValue) {
-	if (xpos >= 320 && ypos >= 320 && xpos < 960 && ypos < 960) {
-		double mappedXpos = ((xpos - 320) / (960 - 320)) * BOX_RESOLUTION;
-		double mappedYpos = (1 - (ypos - 320) / (960 - 320)) * BOX_RESOLUTION;
-		if (context.lifeExecutor.setBit((int)mappedXpos, (int)mappedYpos, newValue)) {
-			context.lifeExecutor.fill_texture(context.textureDataArray);
+	if (xpos >= 0 && ypos >= 0 && xpos < 1280 && ypos < 1280) {
+		std::cout << context.renderWindow.debug() << std::endl;
+		double mappedXpos = (xpos / 1280) * BOX_RESOLUTION + context.renderWindow.top_left.x;
+		double mappedYpos = (1 - (ypos / 1280)) * BOX_RESOLUTION + context.renderWindow.top_left.y;
+
+		if (context.lifeExecutor.setBit((int) std::round(mappedXpos - 0.5), (int) std::round(mappedYpos - 0.5),
+										newValue)) {
+			context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
 		}
 	}
 }
@@ -45,14 +53,29 @@ namespace Callbacks {
 
 		if (key == GLFW_KEY_P && action == GLFW_PRESS) {
 			context->lifeExecutor.randomize_field();
-			context->lifeExecutor.fill_texture(context->textureDataArray);
+			context->lifeExecutor.fill_texture(context->textureDataArray, context->renderWindow);
 		} else if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
 			context->currentlyPlaying = !context->currentlyPlaying;
+		} else {
+			int change = 0;
+			if (action == GLFW_PRESS) {
+				change = 1;
+			} else if (action == GLFW_RELEASE) {
+				change = -1;
+			}
+			if (key == GLFW_KEY_LEFT) {
+				context->movement.x -= change;
+			} else if (key == GLFW_KEY_RIGHT) {
+				context->movement.x += change;
+			} else if (key == GLFW_KEY_DOWN) {
+				context->movement.y -= change;
+			} else if (key == GLFW_KEY_UP) {
+				context->movement.y += change;
+			}
 		}
 	}
 
-	static void cursor_position_callback(GLFWwindow* window, double xpos, double ypos)
-	{
+	static void cursor_position_callback(GLFWwindow *window, double xpos, double ypos) {
 		CallbackContext *context = get_context(window);
 		if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT)) {
 			setLife(*context, xpos, ypos, true);
@@ -72,6 +95,7 @@ namespace Callbacks {
 }
 
 int main() {
+
 	/* Initialize the library */
 	if (!glfwInit())
 		return -1;
@@ -79,10 +103,13 @@ int main() {
 	glfwSetErrorCallback(Callbacks::error_callback);
 
 	CallbackContext context = {
-			.textureDataArray = new uint8_t[BOX_RESOLUTION * BOX_RESOLUTION * 4],
+			.textureDataArray = std::vector<uint8_t>(BOX_RESOLUTION * BOX_RESOLUTION * 4, 0),
 			.lifeExecutor = LifeExecutor(BOX_RESOLUTION),
 			.currentlyPlaying = false,
+			.renderWindow = RenderWindow(Vector2(0, 0), Vector2(BOX_RESOLUTION, BOX_RESOLUTION)),
+			.movement = Vector2(0, 0),
 	};
+	assert(context.textureDataArray.size() == BOX_RESOLUTION * BOX_RESOLUTION * 4);
 
 	/* Create a windowed mode window and its OpenGL context */
 	GLFWwindow *window = glfwCreateWindow(1280, 1280, "Hello World", NULL, NULL);
@@ -114,10 +141,10 @@ int main() {
 
 	const GLfloat vertices[] = {
 			// Positions,       Texture Coord
-			0.5f, 0.5f, 0.0f, 1.0f, 1.0f, // top right
-			0.5f, -0.5f, 0.0f, 1.0f, 0.0f, // bottom right
-			-0.5f, -0.5f, 0.0f, 0.0f, 0.0f, // bottom left
-			-0.5f, 0.5f, 0.0f, 0.0f, 1.0f, // top left
+			1.0f, 1.0f, 0.0f, 1.0f, 1.0f, // top right
+			1.0f, -1.0f, 0.0f, 1.0f, 0.0f, // bottom right
+			-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, // bottom left
+			-1.0f, 1.0f, 0.0f, 0.0f, 1.0f, // top left
 	};
 
 	unsigned int indices[] = {  // note that we start from 0!
@@ -179,11 +206,31 @@ int main() {
 		frameCounter = 0;
 	});
 
-	customGlfwTimer.register_timer(0.1, [&] {
+	std::chrono::duration total_points = std::chrono::duration<long long int, std::nano>::zero();
+	int count = 0;
+
+	customGlfwTimer.register_timer(0.025, [&] {
 		if (context.currentlyPlaying) {
+			auto start = std::chrono::high_resolution_clock::now();
 			context.lifeExecutor.next_step();
-			context.lifeExecutor.fill_texture(context.textureDataArray);
+			auto end = std::chrono::high_resolution_clock::now();
+			total_points += end - start;
+			count += 1;
+			context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
 		}
+	});
+
+	customGlfwTimer.register_timer(0.1, [&] {
+		context.renderWindow += context.movement;
+		if (context.movement != Vector2(0, 0)) {
+			context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
+			if (count != 0) {
+				std::cout << total_points.count() / count << "  " << context.lifeExecutor.count() << std::endl;
+				count = 0;
+				total_points = std::chrono::duration<long long int, std::nano>::zero();
+			}
+		}
+
 	});
 
 	glClearColor(0.2f, 0.3f, 0.2f, 1);
@@ -193,7 +240,7 @@ int main() {
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, BOX_RESOLUTION, BOX_RESOLUTION, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-					 context.textureDataArray);
+					 context.textureDataArray.data());
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, mainTexId);

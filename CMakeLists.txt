@@ -10,7 +10,7 @@ add_library(glad include/glad/glad.h glad.c)
 target_include_directories(glad PUBLIC include/)
 #target_include_directories(include/)
 
-add_executable(game_of_life main.cpp shader.cpp shader.h LifeExecutor.cpp LifeExecutor.h CustomGlfwTimer.cpp CustomGlfwTimer.h)
+add_executable(game_of_life main.cpp shader.cpp shader.h LifeExecutor.cpp LifeExecutor.h CustomGlfwTimer.cpp CustomGlfwTimer.h Vector2.h RenderWindow.h main.h)
 
 target_link_libraries(game_of_life glad)
 target_link_libraries(game_of_life glfw)
