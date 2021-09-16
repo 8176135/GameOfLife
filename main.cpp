@@ -21,22 +21,32 @@ struct CallbackContext {
 	bool currentlyPlaying;
 	RenderWindow renderWindow;
 	Vector2 movement;
+	std::optional<Vector2> lastMousePos;
 };
 
 CallbackContext *get_context(GLFWwindow *w) {
 	return static_cast<CallbackContext *>(glfwGetWindowUserPointer(w));
 }
 
-static void setLife(CallbackContext &context, double xpos, double ypos, bool newValue) {
+static std::optional<Vector2> getMappedCursorPosOffset(CallbackContext const &context, double xpos, double ypos) {
 	if (xpos >= 0 && ypos >= 0 && xpos < 1280 && ypos < 1280) {
-		std::cout << context.renderWindow.debug() << std::endl;
+//		std::cout << context.renderWindow.debug() << std::endl;
 		double mappedXpos = (xpos / 1280) * BOX_RESOLUTION + context.renderWindow.top_left.x;
 		double mappedYpos = (1 - (ypos / 1280)) * BOX_RESOLUTION + context.renderWindow.top_left.y;
+		return Vector2((int) std::round(mappedXpos - 0.5), (int) std::round(mappedYpos - 0.5));
+	} else {
+		return {};
+	}
+}
 
-		if (context.lifeExecutor.setBit((int) std::round(mappedXpos - 0.5), (int) std::round(mappedYpos - 0.5),
-										newValue)) {
-			context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
-		}
+static std::optional<Vector2> getMappedCursorPos(double xpos, double ypos) {
+	if (xpos >= 0 && ypos >= 0 && xpos < 1280 && ypos < 1280) {
+		//		std::cout << context.renderWindow.debug() << std::endl;
+		double mappedXpos = (xpos / 1280) * BOX_RESOLUTION;
+		double mappedYpos = (1 - (ypos / 1280)) * BOX_RESOLUTION;
+		return Vector2((int) std::round(mappedXpos - 0.5), (int) std::round(mappedYpos - 0.5));
+	} else {
+		return {};
 	}
 }
 
@@ -76,20 +86,61 @@ namespace Callbacks {
 	}
 
 	static void cursor_position_callback(GLFWwindow *window, double xpos, double ypos) {
-		CallbackContext *context = get_context(window);
+		CallbackContext &context = *get_context(window);
+		auto mappedPos = getMappedCursorPosOffset(context, xpos, ypos);
+		if (!mappedPos.has_value()) {
+			return;
+		}
+
 		if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT)) {
-			setLife(*context, xpos, ypos, true);
+			if (context.lifeExecutor.setBit(mappedPos.value(), true)) {
+				context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
+			}
 		} else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT)) {
-			setLife(*context, xpos, ypos, false);
+			if (context.lifeExecutor.setBit(mappedPos.value(), false)) {
+				context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
+			}
+		}
+
+		if (context.lastMousePos.has_value()) {
+			auto noOffsetMappedPos = getMappedCursorPos(xpos, ypos);
+			if (context.lastMousePos != noOffsetMappedPos) {
+				Vector2 diff = context.lastMousePos.value() - noOffsetMappedPos.value();
+				context.renderWindow += diff;
+				context.lastMousePos = noOffsetMappedPos.value();
+				context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
+			}
 		}
 	}
 
 	static void mouse_button_callback(GLFWwindow *window, int button, int action, int mods) {
 		if ((button == GLFW_MOUSE_BUTTON_LEFT || button == GLFW_MOUSE_BUTTON_RIGHT) && action == GLFW_PRESS) {
-			CallbackContext *context = get_context(window);
+			CallbackContext& context = *get_context(window);
 			double xpos, ypos;
 			glfwGetCursorPos(window, &xpos, &ypos);
-			setLife(*context, xpos, ypos, button == GLFW_MOUSE_BUTTON_LEFT);
+			auto mappedPos = getMappedCursorPosOffset(context, xpos, ypos);
+			if (!mappedPos.has_value()) {
+				return;
+			}
+			if (context.lifeExecutor.setBit(mappedPos.value(),  button == GLFW_MOUSE_BUTTON_LEFT)) {
+				context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
+			}
+		}
+
+		if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
+			CallbackContext &context = *get_context(window);
+			double xpos, ypos;
+			glfwGetCursorPos(window, &xpos, &ypos);
+			auto mappedPos = getMappedCursorPos(xpos, ypos);
+			if (!mappedPos.has_value()) {
+				return;
+			}
+
+			if (action == GLFW_PRESS) {
+				context.lastMousePos = mappedPos;
+			} else if (action == GLFW_RELEASE) {
+				context.lastMousePos = {};
+			}
 		}
 	}
 }
@@ -106,8 +157,8 @@ int main() {
 			.textureDataArray = std::vector<uint8_t>(BOX_RESOLUTION * BOX_RESOLUTION * 4, 0),
 			.lifeExecutor = LifeExecutor(BOX_RESOLUTION),
 			.currentlyPlaying = false,
-			.renderWindow = RenderWindow(Vector2(0, 0), Vector2(BOX_RESOLUTION, BOX_RESOLUTION)),
-			.movement = Vector2(0, 0),
+			.renderWindow = RenderWindow(Vector2::zero(), Vector2(BOX_RESOLUTION, BOX_RESOLUTION)),
+			.movement = Vector2::zero(),
 	};
 	assert(context.textureDataArray.size() == BOX_RESOLUTION * BOX_RESOLUTION * 4);
 

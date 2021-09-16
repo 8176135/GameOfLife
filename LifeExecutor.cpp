@@ -94,16 +94,16 @@ void LifeExecutor::randomize_field() {
 	generateRandomArray(*live_cells, Vector2(BOX_RESOLUTION, BOX_RESOLUTION), 0, BOX_RESOLUTION * BOX_RESOLUTION);
 }
 
-bool LifeExecutor::setBit(int x, int y, bool newValue) {
-	auto retVal = live_cells->contains(Vector2(x, y));
+bool LifeExecutor::setBit(Vector2 pos, bool newValue) {
+	auto retVal = live_cells->contains(pos);
 	if (retVal == newValue) {
 		return false;
 	}
 
 	if (newValue) {
-		live_cells->insert(Vector2(x, y));
+		live_cells->insert(pos);
 	} else {
-		live_cells->erase(Vector2(x, y));
+		live_cells->erase(pos);
 	}
 
 	return true;

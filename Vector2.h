@@ -14,6 +14,10 @@ struct Vector2 {
 
 	Vector2(int x, int y) : x(x), y(y) {};
 
+	static Vector2 zero() {
+		return {0, 0};
+	}
+
 	bool operator==(const Vector2 &other) const {
 		return (x == other.x
 				&& y == other.y);
@@ -25,16 +29,33 @@ struct Vector2 {
 		return *this;
 	}
 
+	Vector2 &operator-=(const Vector2 &rhs) {
+		this->x -= rhs.x;
+		this->y -= rhs.y;
+		return *this;
+	}
+
 	[[nodiscard]] std::string debug() const {
 		std::ostringstream stream;
 		stream << "Vector2(" << this->x << ", " << this->y << ")";
 		return stream.str();
 	}
 
+private:
+	friend std::ostream& operator<<(std::ostream& os, Vector2 const& rhs) {
+		os << "Vector2(" << rhs.x << ", " << rhs.y << ")";
+		return os;
+	}
 };
 
 inline Vector2 operator+(Vector2 lhs, const Vector2 &rhs) {
 	lhs += rhs;
+	return lhs;
+}
+
+
+inline Vector2 operator-(Vector2 lhs, const Vector2 &rhs) {
+	lhs -= rhs;
 	return lhs;
 }
 

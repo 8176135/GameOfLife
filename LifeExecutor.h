@@ -20,7 +20,7 @@ public:
 	void randomize_field();
 
 	// Returns true new value was set;
-	bool setBit(int x, int y, bool newValue);
+	bool setBit(Vector2 pos, bool newValue);
 
 	unsigned long long count();
 

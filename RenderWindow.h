@@ -26,9 +26,9 @@ struct RenderWindow {
 		return other;
 	}
 
-	std::string debug() {
+	[[nodiscard]] std::string debug() const {
 		std::ostringstream output;
-		output << this->top_left.debug() << " , " << this->bottom_right.debug() << ";";
+		output << this->top_left << " , " << this->bottom_right << ";";
 		return output.str();
 	}
 };
