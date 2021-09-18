@@ -3,7 +3,7 @@ out vec4 FragColor;
 in vec2 TexCoord;
 
 //uniform sampler2D texture1;
-uniform int resolution;
+//uniform int resolution;
 
 void main()
 {

@@ -15,6 +15,7 @@ struct Vector2 {
 	int x, y;
 
 	Vector2(int x, int y) : x(x), y(y) {};
+	Vector2(int scalar) : x(scalar), y(scalar) {};
 
 //	Vector2(const Vector2& input) : x(input.x), y(input.y) {
 //		std:: cout << "YOLO" << std::endl;

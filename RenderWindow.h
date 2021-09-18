@@ -7,6 +7,7 @@
 
 //#include "Vector2.h"
 #include "glm/glm.hpp"
+#include "glm/gtx/string_cast.hpp"
 #include "string"
 
 using glm::vec2;
@@ -16,6 +17,10 @@ struct RenderWindow {
 
 	vec2 top_left;
 	vec2 bottom_right;
+
+	vec2 get_middle() {
+		return (this->bottom_right - this->top_left) * glm::vec2(0.5) + this->top_left;
+	}
 
 	RenderWindow &operator+=(const vec2 &rhs) {
 		this->bottom_right += rhs;
@@ -29,11 +34,11 @@ struct RenderWindow {
 		return other;
 	}
 
-//	[[nodiscard]] std::string debug() const {
-//		std::ostringstream output;
-//		output << this->top_left << " , " << this->bottom_right << ";";
-//		return output.str();
-//	}
+	[[nodiscard]] std::string debug() const {
+		std::ostringstream output;
+		output << glm::to_string(this->top_left) << " , " << glm::to_string(this->bottom_right) << ";";
+		return output.str();
+	}
 };
 
 #endif //GAME_OF_LIFE_RENDERWINDOW_H

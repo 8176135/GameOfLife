@@ -48,38 +48,38 @@ struct CallbackContext {
 	RenderWindow renderWindow;
 	glm::vec2 movement;
 	glm::vec2 lastMousePos;
+	double zoomLevel;
 };
 
 CallbackContext *get_context(GLFWwindow *w) {
 	return static_cast<CallbackContext *>(glfwGetWindowUserPointer(w));
 }
 
-static std::optional<Vector2> getMappedCursorPosOffset(CallbackContext const &context, double xpos, double ypos) {
-	if (xpos >= 0 && ypos >= 0 && xpos < WINDOW_SIZE && ypos < WINDOW_SIZE) {
-//		std::cout << context.renderWindow.debug() << std::endl;
-		double mappedXpos = (xpos / WINDOW_SIZE) * BOX_RESOLUTION + context.renderWindow.top_left.x;
-		double mappedYpos = ((ypos / WINDOW_SIZE)) * BOX_RESOLUTION + context.renderWindow.top_left.y;
-		return Vector2((int) std::round(mappedXpos), (int) std::round(mappedYpos));
-	} else {
-		return {};
-	}
-}
-
 static Vector2 convertToOffsetPos(CallbackContext const &context, glm::vec2 toConvert) {
-	double mappedXpos = toConvert.x - context.renderWindow.top_left.x;
-	double mappedYpos = toConvert.y - context.renderWindow.top_left.y;
+	double mappedXpos = toConvert.x + context.renderWindow.top_left.x;
+	double mappedYpos = toConvert.y + context.renderWindow.top_left.y;
 	return {(int) std::round(mappedXpos), (int) std::round(mappedYpos)};
 }
 
-static std::optional<glm::vec2> getMappedCursorPos(double xpos, double ypos) {
+static std::optional<glm::vec2> getMappedCursorPos(CallbackContext const &context, double xpos, double ypos) {
 	if (xpos >= 0 && ypos >= 0 && xpos < WINDOW_SIZE && ypos < WINDOW_SIZE) {
-		double mappedXpos = ((xpos / WINDOW_SIZE)) * BOX_RESOLUTION;
-		double mappedYpos = ((ypos / WINDOW_SIZE)) * BOX_RESOLUTION;
+		double mappedXpos = ((xpos / WINDOW_SIZE)) * DEFAULT_BOX_RESOLUTION * context.zoomLevel;
+		double mappedYpos = ((ypos / WINDOW_SIZE)) * DEFAULT_BOX_RESOLUTION * context.zoomLevel;
 		return glm::vec2(mappedXpos, mappedYpos);
 	} else {
 		return {};
 	}
 }
+
+static std::optional<Vector2> getMappedCursorPosOffset(CallbackContext const &context, double xpos, double ypos) {
+	auto out = getMappedCursorPos(context, xpos, ypos);
+	if (!out.has_value()) {
+		return {};
+	} else {
+		return convertToOffsetPos(context, out.value());
+	}
+}
+
 
 namespace Callbacks {
 	static void error_callback([[maybe_unused]] int error, const char *description) {
@@ -119,7 +119,7 @@ namespace Callbacks {
 
 	static void cursor_position_callback(GLFWwindow *window, double xpos, double ypos) {
 		CallbackContext &context = *get_context(window);
-		auto noOffsetMappedPos = getMappedCursorPos(xpos, ypos);
+		auto noOffsetMappedPos = getMappedCursorPos(context, xpos, ypos);
 
 		if (!noOffsetMappedPos.has_value()) {
 			return;
@@ -142,7 +142,7 @@ namespace Callbacks {
 
 		if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE)) {
 			if (context.lastMousePos != noOffsetMappedPos) {
-				glm::vec2 diff = noOffsetMappedPos.value() - context.lastMousePos;
+				glm::vec2 diff = context.lastMousePos - noOffsetMappedPos.value();
 				context.renderWindow += diff;
 			}
 		}
@@ -169,7 +169,7 @@ namespace Callbacks {
 			CallbackContext &context = *get_context(window);
 			double xpos, ypos;
 			glfwGetCursorPos(window, &xpos, &ypos);
-			auto mappedPos = getMappedCursorPos(xpos, ypos);
+			auto mappedPos = getMappedCursorPos(context, xpos, ypos);
 			if (!mappedPos.has_value()) {
 				return;
 			}
@@ -182,9 +182,19 @@ namespace Callbacks {
 		}
 	}
 
-	static void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
-	{
-		BOX_RESOLUTION += yoffset * -10;
+	static void scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
+		CallbackContext &context = *get_context(window);
+		context.zoomLevel -= yoffset * 0.1;
+
+//		double xpos, ypos;
+//		glfwGetCursorPos(window, &xpos, &ypos);
+
+		auto middle = context.renderWindow.get_middle();
+		auto offset = glm::vec2((float)(DEFAULT_BOX_RESOLUTION * context.zoomLevel * 0.5));
+
+		context.renderWindow.top_left = middle - offset;
+		context.renderWindow.bottom_right = middle + offset;
+		std::cout << context.renderWindow.debug() << std::endl;
 	}
 
 }
@@ -198,10 +208,12 @@ int main() {
 	glfwSetErrorCallback(Callbacks::error_callback);
 
 	CallbackContext context = {
-			.lifeExecutor = LifeExecutor(BOX_RESOLUTION),
+			.lifeExecutor = LifeExecutor(DEFAULT_BOX_RESOLUTION),
 			.currentlyPlaying = false,
-			.renderWindow = RenderWindow(glm::vec2(), glm::vec2(BOX_RESOLUTION, BOX_RESOLUTION)),
+			.renderWindow = RenderWindow(glm::vec2(), glm::vec2(DEFAULT_BOX_RESOLUTION, DEFAULT_BOX_RESOLUTION)),
 			.movement = glm::vec2(),
+			.lastMousePos = glm::vec2(0, 0),
+			.zoomLevel = 1,
 	};
 
 	/* Create a windowed mode window and its OpenGL context */
@@ -286,13 +298,13 @@ int main() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-//	generateRandomArray(dataArray, BOX_RESOLUTION);
+//	generateRandomArray(dataArray, DEFAULT_BOX_RESOLUTION);
 
 //	glGenerateMipmap(GL_TEXTURE_2D);
 
 	golShader.use();
 //	golShader.setInt("texture1", 0);
-	golShader.setInt("resolution", BOX_RESOLUTION);
+//	golShader.setInt("resolution", DEFAULT_BOX_RESOLUTION);
 //    glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
 
 	int frameCounter = 0;
@@ -327,13 +339,17 @@ int main() {
 		}
 	});
 
+	glm::mat4 view = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
+	view = glm::translate(view, glm::vec3(0, 0, -1.0));
+	golShader.setMat4("view", view);
+
 	glClearColor(0.2f, 0.3f, 0.2f, 1);
 	/* Loop until the user closes the window */
 	while (!glfwWindowShouldClose(window)) {
 		/* Render here */
 		glClear(GL_COLOR_BUFFER_BIT);
 
-//		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, BOX_RESOLUTION, BOX_RESOLUTION, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+//		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, DEFAULT_BOX_RESOLUTION, DEFAULT_BOX_RESOLUTION, 0, GL_RGBA, GL_UNSIGNED_BYTE,
 //					 context.textureDataArray.data());
 
 //		glActiveTexture(GL_TEXTURE0);
@@ -341,13 +357,10 @@ int main() {
 
 		golShader.use();
 
-		glm::mat4 view = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
 		glm::mat4 projection = glm::mat4(1.0f);
-		projection = glm::ortho(0.0, (double) BOX_RESOLUTION, (double) BOX_RESOLUTION, 0.0, 0.1, 100.0);
-		view = glm::translate(view, glm::vec3(context.renderWindow.top_left.x, context.renderWindow.top_left.y, -1.0));
+		projection = glm::ortho(context.renderWindow.top_left.x, context.renderWindow.bottom_right.x, context.renderWindow.bottom_right.y, context.renderWindow.top_left.y, 0.1f, 100.0f);
 
 		golShader.setMat4("projection", projection);
-		golShader.setMat4("view", view);
 
 		glBindVertexArray(vaoId);
 		for (const auto &item : context.lifeExecutor.live_cells_get()) {

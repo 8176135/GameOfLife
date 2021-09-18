@@ -45,7 +45,7 @@ LifeExecutor::LifeExecutor(int reserve_size) {
 	last_cells = &live_cells_b;
 	live_cells = &live_cells_a;
 
-	generateRandomArray(*live_cells, Vector2(BOX_RESOLUTION, BOX_RESOLUTION), 0, BOX_RESOLUTION * BOX_RESOLUTION);
+	generateRandomArray(*live_cells, Vector2(DEFAULT_BOX_RESOLUTION, DEFAULT_BOX_RESOLUTION), 0, DEFAULT_BOX_RESOLUTION * DEFAULT_BOX_RESOLUTION);
 }
 
 void LifeExecutor::next_step() {
@@ -91,7 +91,7 @@ void LifeExecutor::next_step() {
 
 void LifeExecutor::randomize_field() {
 	live_cells->clear();
-	generateRandomArray(*live_cells, Vector2(BOX_RESOLUTION, BOX_RESOLUTION), 0, BOX_RESOLUTION * BOX_RESOLUTION);
+	generateRandomArray(*live_cells, Vector2(DEFAULT_BOX_RESOLUTION, DEFAULT_BOX_RESOLUTION), 0, DEFAULT_BOX_RESOLUTION * DEFAULT_BOX_RESOLUTION);
 }
 
 bool LifeExecutor::setBit(Vector2 pos, bool newValue) {
