@@ -7,12 +7,18 @@
 
 #include <string>
 #include <sstream>
+#include <iostream>
 #include "unordered_set"
+#include <cmath>
 
 struct Vector2 {
 	int x, y;
 
 	Vector2(int x, int y) : x(x), y(y) {};
+
+//	Vector2(const Vector2& input) : x(input.x), y(input.y) {
+//		std:: cout << "YOLO" << std::endl;
+//	}
 
 	static Vector2 zero() {
 		return {0, 0};
@@ -33,6 +39,10 @@ struct Vector2 {
 		this->x -= rhs.x;
 		this->y -= rhs.y;
 		return *this;
+	}
+
+	Vector2 abs() {
+		return Vector2(std::abs(this->x), std::abs(this->y));
 	}
 
 	[[nodiscard]] std::string debug() const {

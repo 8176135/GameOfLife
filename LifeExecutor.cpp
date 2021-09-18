@@ -73,21 +73,21 @@ void LifeExecutor::next_step() {
 	std::swap(live_cells, last_cells);
 }
 
-void LifeExecutor::fill_texture(std::vector<uint8_t> &input_array, const RenderWindow& render_window) {
-	std::fill(std::begin(input_array), std::end(input_array), '\0');
-	for (const auto &item : *live_cells) {
-		if (item.x < render_window.top_left.x || item.x >= render_window.bottom_right.x ||
-			item.y < render_window.top_left.y || item.y >= render_window.bottom_right.y) {
-			continue;
-		}
-		auto index = ((item.y - render_window.top_left.y) * (render_window.bottom_right.x - render_window.top_left.x) +
-					  (item.x - render_window.top_left.x)) * 4;
-		input_array[index + 0] = 0xFF;
-		input_array[index + 1] = 0xFF;
-		input_array[index + 2] = 0xFF;
-		input_array[index + 3] = 0xFF;
-	}
-}
+//void LifeExecutor::fill_texture(std::vector<uint8_t> &input_array, const RenderWindow &render_window) {
+//	std::fill(std::begin(input_array), std::end(input_array), '\0');
+//	for (const auto &item : *live_cells) {
+//		if (item.x < render_window.top_left.x || item.x >= render_window.bottom_right.x ||
+//			item.y < render_window.top_left.y || item.y >= render_window.bottom_right.y) {
+//			continue;
+//		}
+//		auto index = ((item.y - render_window.top_left.y) * (render_window.bottom_right.x - render_window.top_left.x) +
+//					  (item.x - render_window.top_left.x)) * 4;
+//		input_array[index + 0] = 0xFF;
+//		input_array[index + 1] = 0xFF;
+//		input_array[index + 2] = 0xFF;
+//		input_array[index + 3] = 0xFF;
+//	}
+//}
 
 void LifeExecutor::randomize_field() {
 	live_cells->clear();
@@ -111,4 +111,8 @@ bool LifeExecutor::setBit(Vector2 pos, bool newValue) {
 
 unsigned long long LifeExecutor::count() {
 	return live_cells->size();
+}
+
+const std::unordered_set<Vector2> &LifeExecutor::live_cells_get() {
+	return *this->live_cells;
 }

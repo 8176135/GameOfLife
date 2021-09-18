@@ -2,26 +2,52 @@
 
 #include <cmath>
 #include <iostream>
-#include <sstream>
 #include <chrono>
+#include "glm/glm.hpp"
+#include <glm/gtc/matrix_transform.hpp>
 #include "glad/glad.h"
 #include "GLFW/glfw3.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 
 #include "stb_image.h"
+
 #include "shader.h"
 #include "LifeExecutor.h"
 #include "CustomGlfwTimer.h"
 #include "RenderWindow.h"
 
+static void lineAlgo(Vector2 start, Vector2 end, const std::function<void(Vector2)> &applicator) {
+	auto delta = Vector2(std::abs(end.x - start.x), -std::abs(end.y - start.y));
+	auto stepX = start.x < end.x ? 1 : -1;
+	auto stepY = start.y < end.y ? 1 : -1;
+
+	auto diff = delta.x + delta.y;
+
+	Vector2 current{start};
+	while (true) {
+		applicator(current);
+		if (current == end) return;
+		auto doubleDiff = 2 * diff;
+		if (doubleDiff >= delta.y) {
+			diff += delta.y;
+			current.x += stepX;
+		}
+
+		if (doubleDiff <= delta.x) {
+			diff += delta.x;
+			current.y += stepY;
+		}
+	}
+}
+
 struct CallbackContext {
-	std::vector<uint8_t> textureDataArray;
+//	std::vector<uint8_t> textureDataArray;
 	LifeExecutor lifeExecutor;
 	bool currentlyPlaying;
 	RenderWindow renderWindow;
-	Vector2 movement;
-	std::optional<Vector2> lastMousePos;
+	glm::vec2 movement;
+	glm::vec2 lastMousePos;
 };
 
 CallbackContext *get_context(GLFWwindow *w) {
@@ -29,33 +55,41 @@ CallbackContext *get_context(GLFWwindow *w) {
 }
 
 static std::optional<Vector2> getMappedCursorPosOffset(CallbackContext const &context, double xpos, double ypos) {
-	if (xpos >= 0 && ypos >= 0 && xpos < 1280 && ypos < 1280) {
+	if (xpos >= 0 && ypos >= 0 && xpos < WINDOW_SIZE && ypos < WINDOW_SIZE) {
 //		std::cout << context.renderWindow.debug() << std::endl;
-		double mappedXpos = (xpos / 1280) * BOX_RESOLUTION + context.renderWindow.top_left.x;
-		double mappedYpos = (1 - (ypos / 1280)) * BOX_RESOLUTION + context.renderWindow.top_left.y;
-		return Vector2((int) std::round(mappedXpos - 0.5), (int) std::round(mappedYpos - 0.5));
+		double mappedXpos = (xpos / WINDOW_SIZE) * BOX_RESOLUTION + context.renderWindow.top_left.x;
+		double mappedYpos = ((ypos / WINDOW_SIZE)) * BOX_RESOLUTION + context.renderWindow.top_left.y;
+		return Vector2((int) std::round(mappedXpos), (int) std::round(mappedYpos));
 	} else {
 		return {};
 	}
 }
 
-static std::optional<Vector2> getMappedCursorPos(double xpos, double ypos) {
-	if (xpos >= 0 && ypos >= 0 && xpos < 1280 && ypos < 1280) {
+static Vector2 convertToOffsetPos(CallbackContext const &context, glm::vec2 toConvert) {
+	//		std::cout << context.renderWindow.debug() << std::endl;
+	double mappedXpos = toConvert.x - context.renderWindow.top_left.x;
+	double mappedYpos = toConvert.y - context.renderWindow.top_left.y;
+	return {(int) std::round(mappedXpos), (int) std::round(mappedYpos)};
+}
+
+static std::optional<glm::vec2> getMappedCursorPos(double xpos, double ypos) {
+	if (xpos >= 0 && ypos >= 0 && xpos < WINDOW_SIZE && ypos < WINDOW_SIZE) {
 		//		std::cout << context.renderWindow.debug() << std::endl;
-		double mappedXpos = (xpos / 1280) * BOX_RESOLUTION;
-		double mappedYpos = (1 - (ypos / 1280)) * BOX_RESOLUTION;
-		return Vector2((int) std::round(mappedXpos - 0.5), (int) std::round(mappedYpos - 0.5));
+		double mappedXpos = ((xpos / WINDOW_SIZE)) * BOX_RESOLUTION;
+		double mappedYpos = ((ypos / WINDOW_SIZE)) * BOX_RESOLUTION;
+		return glm::vec2(mappedXpos, mappedYpos);
 	} else {
 		return {};
 	}
 }
 
 namespace Callbacks {
-	static void error_callback(int error, const char *description) {
+	static void error_callback([[maybe_unused]] int error, const char *description) {
 		std::cerr << "Error: " << description << std::endl;
 	}
 
-	static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods) {
+	static void key_callback(GLFWwindow *window, int key, [[maybe_unused]] int scancode, int action,
+							 [[maybe_unused]] int mods) {
 		if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 			glfwSetWindowShouldClose(window, GLFW_TRUE);
 
@@ -63,7 +97,7 @@ namespace Callbacks {
 
 		if (key == GLFW_KEY_P && action == GLFW_PRESS) {
 			context->lifeExecutor.randomize_field();
-			context->lifeExecutor.fill_texture(context->textureDataArray, context->renderWindow);
+//			context->lifeExecutor.fill_texture(context->textureDataArray, context->renderWindow);
 		} else if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
 			context->currentlyPlaying = !context->currentlyPlaying;
 		} else {
@@ -87,43 +121,50 @@ namespace Callbacks {
 
 	static void cursor_position_callback(GLFWwindow *window, double xpos, double ypos) {
 		CallbackContext &context = *get_context(window);
-		auto mappedPos = getMappedCursorPosOffset(context, xpos, ypos);
-		if (!mappedPos.has_value()) {
+		auto noOffsetMappedPos = getMappedCursorPos(xpos, ypos);
+
+		if (!noOffsetMappedPos.has_value()) {
 			return;
 		}
 
 		if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT)) {
-			if (context.lifeExecutor.setBit(mappedPos.value(), true)) {
-				context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
-			}
+			auto convertedPos = convertToOffsetPos(context, noOffsetMappedPos.value());
+			auto convertedLastPos = convertToOffsetPos(context, context.lastMousePos);
+			lineAlgo(convertedLastPos, convertedPos, [&](Vector2 current) {
+				(context.lifeExecutor.setBit(current, true));
+			});
+
 		} else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT)) {
-			if (context.lifeExecutor.setBit(mappedPos.value(), false)) {
-				context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
+			auto convertedPos = convertToOffsetPos(context, noOffsetMappedPos.value());
+			auto convertedLastPos = convertToOffsetPos(context, context.lastMousePos);
+			lineAlgo(convertedLastPos, convertedPos, [&](Vector2 current) {
+				(context.lifeExecutor.setBit(current, false));
+			});
+		}
+
+		if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE)) {
+			if (context.lastMousePos != noOffsetMappedPos) {
+				glm::vec2 diff = noOffsetMappedPos.value() - context.lastMousePos;
+				context.renderWindow += diff;
+//				context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
 			}
 		}
 
-		if (context.lastMousePos.has_value()) {
-			auto noOffsetMappedPos = getMappedCursorPos(xpos, ypos);
-			if (context.lastMousePos != noOffsetMappedPos) {
-				Vector2 diff = context.lastMousePos.value() - noOffsetMappedPos.value();
-				context.renderWindow += diff;
-				context.lastMousePos = noOffsetMappedPos.value();
-				context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
-			}
-		}
+		context.lastMousePos = noOffsetMappedPos.value();
+
 	}
 
-	static void mouse_button_callback(GLFWwindow *window, int button, int action, int mods) {
+	static void mouse_button_callback(GLFWwindow *window, int button, int action, [[maybe_unused]] int mods) {
 		if ((button == GLFW_MOUSE_BUTTON_LEFT || button == GLFW_MOUSE_BUTTON_RIGHT) && action == GLFW_PRESS) {
-			CallbackContext& context = *get_context(window);
+			CallbackContext &context = *get_context(window);
 			double xpos, ypos;
 			glfwGetCursorPos(window, &xpos, &ypos);
 			auto mappedPos = getMappedCursorPosOffset(context, xpos, ypos);
 			if (!mappedPos.has_value()) {
 				return;
 			}
-			if (context.lifeExecutor.setBit(mappedPos.value(),  button == GLFW_MOUSE_BUTTON_LEFT)) {
-				context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
+			if (context.lifeExecutor.setBit(mappedPos.value(), button == GLFW_MOUSE_BUTTON_LEFT)) {
+//				context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
 			}
 		}
 
@@ -137,7 +178,7 @@ namespace Callbacks {
 			}
 
 			if (action == GLFW_PRESS) {
-				context.lastMousePos = mappedPos;
+				context.lastMousePos = mappedPos.value();
 			} else if (action == GLFW_RELEASE) {
 				context.lastMousePos = {};
 			}
@@ -145,7 +186,38 @@ namespace Callbacks {
 	}
 }
 
+//static void lineAlgoHigh(Vector2 start, Vector2 end, const std::function<void(Vector2)> &applicator) {
+//	auto delta = end - start;
+//	int yChanger = 1;
+//
+//	if (delta.y < 0) {
+//		yChanger = -1;
+//		delta.y *= -1;
+//	}
+//
+//	auto dPrime = 2 * delta.y - delta.x;
+//	Vector2 current(0, start.y);
+//
+//	for (int i = start.x; i <= end.x; ++i) {
+//		current.x = i;
+//		applicator(current);
+//		if (dPrime > 0) {
+//			current.y += yChanger;
+//			dPrime = dPrime + 2 * (delta.y - delta.x);
+//		} else {
+//			dPrime = dPrime + 2 * delta.y;
+//		}
+//	}
+//}
+
 int main() {
+//
+//	lineAlgo(Vector2(5, 5), Vector2(10, 15), [](Vector2 current) {
+//		std::cout << current << std::endl;
+//	});
+//
+//	return 0;
+
 
 	/* Initialize the library */
 	if (!glfwInit())
@@ -154,16 +226,16 @@ int main() {
 	glfwSetErrorCallback(Callbacks::error_callback);
 
 	CallbackContext context = {
-			.textureDataArray = std::vector<uint8_t>(BOX_RESOLUTION * BOX_RESOLUTION * 4, 0),
+//			.textureDataArray = std::vector<uint8_t>(BOX_RESOLUTION * BOX_RESOLUTION * 4, 0),
 			.lifeExecutor = LifeExecutor(BOX_RESOLUTION),
 			.currentlyPlaying = false,
-			.renderWindow = RenderWindow(Vector2::zero(), Vector2(BOX_RESOLUTION, BOX_RESOLUTION)),
-			.movement = Vector2::zero(),
+			.renderWindow = RenderWindow(glm::vec2(), glm::vec2(BOX_RESOLUTION, BOX_RESOLUTION)),
+			.movement = glm::vec2(),
 	};
-	assert(context.textureDataArray.size() == BOX_RESOLUTION * BOX_RESOLUTION * 4);
 
 	/* Create a windowed mode window and its OpenGL context */
-	GLFWwindow *window = glfwCreateWindow(1280, 1280, "Hello World", NULL, NULL);
+	glfwWindowHint(GLFW_SAMPLES, 8);
+	GLFWwindow *window = glfwCreateWindow(WINDOW_SIZE, WINDOW_SIZE, "Hello World", nullptr, nullptr);
 	if (!window) {
 		glfwTerminate();
 		return -1;
@@ -179,6 +251,8 @@ int main() {
 		return -1;
 	}
 
+	glEnable(GL_MULTISAMPLE);
+
 	glfwSwapInterval(1);
 	glfwSetKeyCallback(window, Callbacks::key_callback);
 	glfwSetMouseButtonCallback(window, Callbacks::mouse_button_callback);
@@ -192,10 +266,10 @@ int main() {
 
 	const GLfloat vertices[] = {
 			// Positions,       Texture Coord
-			1.0f, 1.0f, 0.0f, 1.0f, 1.0f, // top right
-			1.0f, -1.0f, 0.0f, 1.0f, 0.0f, // bottom right
-			-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, // bottom left
-			-1.0f, 1.0f, 0.0f, 0.0f, 1.0f, // top left
+			0.5f, 0.5f, 0.0f, 1.0f, 1.0f, // top right
+			0.5f, -0.5f, 0.0f, 1.0f, 0.0f, // bottom right
+			-0.5f, -0.5f, 0.0f, 0.0f, 0.0f, // bottom left
+			-0.5f, 0.5f, 0.0f, 0.0f, 1.0f, // top left
 	};
 
 	unsigned int indices[] = {  // note that we start from 0!
@@ -227,14 +301,14 @@ int main() {
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementBufferId);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
-	GLuint mainTexId;
+//	GLuint mainTexId;
+//
+//	glGenTextures(1, &mainTexId);
+//	glBindTexture(GL_TEXTURE_2D, mainTexId);
+//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
 
-	glGenTextures(1, &mainTexId);
-	glBindTexture(GL_TEXTURE_2D, mainTexId);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-
-	float borderColor[] = {0.0f, 0.0f, 0.0f, 1.0f};
+	float borderColor[] = {0.0f, 0.0f, 0.0f, 0.5f};
 	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -245,7 +319,7 @@ int main() {
 //	glGenerateMipmap(GL_TEXTURE_2D);
 
 	golShader.use();
-	golShader.setInt("texture1", 0);
+//	golShader.setInt("texture1", 0);
 	golShader.setInt("resolution", BOX_RESOLUTION);
 //    glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
 
@@ -267,21 +341,20 @@ int main() {
 			auto end = std::chrono::high_resolution_clock::now();
 			total_points += end - start;
 			count += 1;
-			context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
+//			context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
 		}
 	});
 
 	customGlfwTimer.register_timer(0.1, [&] {
 		context.renderWindow += context.movement;
-		if (context.movement != Vector2(0, 0)) {
-			context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
+		if (context.movement != glm::vec2(0, 0)) {
+//			context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
 			if (count != 0) {
 				std::cout << total_points.count() / count << "  " << context.lifeExecutor.count() << std::endl;
 				count = 0;
 				total_points = std::chrono::duration<long long int, std::nano>::zero();
 			}
 		}
-
 	});
 
 	glClearColor(0.2f, 0.3f, 0.2f, 1);
@@ -290,15 +363,31 @@ int main() {
 		/* Render here */
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, BOX_RESOLUTION, BOX_RESOLUTION, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-					 context.textureDataArray.data());
+//		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, BOX_RESOLUTION, BOX_RESOLUTION, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+//					 context.textureDataArray.data());
 
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, mainTexId);
+//		glActiveTexture(GL_TEXTURE0);
+//		glBindTexture(GL_TEXTURE_2D, mainTexId);
 
 		golShader.use();
+
+		glm::mat4 view = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
+		glm::mat4 projection = glm::mat4(1.0f);
+		projection = glm::ortho(0.0, (double) BOX_RESOLUTION, (double) BOX_RESOLUTION, 0.0, 0.1, 100.0);
+		view = glm::translate(view, glm::vec3(context.renderWindow.top_left.x, context.renderWindow.top_left.y, -1.0));
+
+		golShader.setMat4("projection", projection);
+		golShader.setMat4("view", view);
+
 		glBindVertexArray(vaoId);
-		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0); // NOLINT(mod
+		for (const auto &item : context.lifeExecutor.live_cells_get()) {
+			// calculate the model matrix for each object and pass it to shader before drawing
+			glm::mat4 position = glm::mat4(1.0f);
+			position = glm::translate(position, glm::vec3(item.x, item.y, 0));
+			golShader.setMat4("position", position);
+
+			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0); // NOLINT(mod
+		}
 
 		/* Swap front and back buffers */
 		glfwSwapBuffers(window);

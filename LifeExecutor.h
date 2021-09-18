@@ -16,13 +16,15 @@ class LifeExecutor {
 public:
 	explicit LifeExecutor(int reserve_size);
 	void next_step();
-	void fill_texture(std::vector<uint8_t> &input_array, const RenderWindow& render_window);
+//	void fill_texture(std::vector<uint8_t> &input_array, const RenderWindow& render_window);
 	void randomize_field();
 
 	// Returns true new value was set;
 	bool setBit(Vector2 pos, bool newValue);
 
 	unsigned long long count();
+
+	const std::unordered_set<Vector2>& live_cells_get();
 
 private:
 	std::unordered_map<Vector2, uint8_t> neighbours;
