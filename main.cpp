@@ -181,6 +181,12 @@ namespace Callbacks {
 			}
 		}
 	}
+
+	static void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+	{
+		BOX_RESOLUTION += yoffset * -10;
+	}
+
 }
 
 int main() {
@@ -222,6 +228,7 @@ int main() {
 	glfwSetKeyCallback(window, Callbacks::key_callback);
 	glfwSetMouseButtonCallback(window, Callbacks::mouse_button_callback);
 	glfwSetCursorPosCallback(window, Callbacks::cursor_position_callback);
+	glfwSetScrollCallback(window, Callbacks::scroll_callback);
 
 	Shader golShader("vertex.glsl", "frag.glsl");
 
