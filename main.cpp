@@ -66,7 +66,6 @@ static std::optional<Vector2> getMappedCursorPosOffset(CallbackContext const &co
 }
 
 static Vector2 convertToOffsetPos(CallbackContext const &context, glm::vec2 toConvert) {
-	//		std::cout << context.renderWindow.debug() << std::endl;
 	double mappedXpos = toConvert.x - context.renderWindow.top_left.x;
 	double mappedYpos = toConvert.y - context.renderWindow.top_left.y;
 	return {(int) std::round(mappedXpos), (int) std::round(mappedYpos)};
@@ -74,7 +73,6 @@ static Vector2 convertToOffsetPos(CallbackContext const &context, glm::vec2 toCo
 
 static std::optional<glm::vec2> getMappedCursorPos(double xpos, double ypos) {
 	if (xpos >= 0 && ypos >= 0 && xpos < WINDOW_SIZE && ypos < WINDOW_SIZE) {
-		//		std::cout << context.renderWindow.debug() << std::endl;
 		double mappedXpos = ((xpos / WINDOW_SIZE)) * BOX_RESOLUTION;
 		double mappedYpos = ((ypos / WINDOW_SIZE)) * BOX_RESOLUTION;
 		return glm::vec2(mappedXpos, mappedYpos);
@@ -146,7 +144,6 @@ namespace Callbacks {
 			if (context.lastMousePos != noOffsetMappedPos) {
 				glm::vec2 diff = noOffsetMappedPos.value() - context.lastMousePos;
 				context.renderWindow += diff;
-//				context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
 			}
 		}
 
@@ -186,38 +183,7 @@ namespace Callbacks {
 	}
 }
 
-//static void lineAlgoHigh(Vector2 start, Vector2 end, const std::function<void(Vector2)> &applicator) {
-//	auto delta = end - start;
-//	int yChanger = 1;
-//
-//	if (delta.y < 0) {
-//		yChanger = -1;
-//		delta.y *= -1;
-//	}
-//
-//	auto dPrime = 2 * delta.y - delta.x;
-//	Vector2 current(0, start.y);
-//
-//	for (int i = start.x; i <= end.x; ++i) {
-//		current.x = i;
-//		applicator(current);
-//		if (dPrime > 0) {
-//			current.y += yChanger;
-//			dPrime = dPrime + 2 * (delta.y - delta.x);
-//		} else {
-//			dPrime = dPrime + 2 * delta.y;
-//		}
-//	}
-//}
-
 int main() {
-//
-//	lineAlgo(Vector2(5, 5), Vector2(10, 15), [](Vector2 current) {
-//		std::cout << current << std::endl;
-//	});
-//
-//	return 0;
-
 
 	/* Initialize the library */
 	if (!glfwInit())
@@ -226,7 +192,6 @@ int main() {
 	glfwSetErrorCallback(Callbacks::error_callback);
 
 	CallbackContext context = {
-//			.textureDataArray = std::vector<uint8_t>(BOX_RESOLUTION * BOX_RESOLUTION * 4, 0),
 			.lifeExecutor = LifeExecutor(BOX_RESOLUTION),
 			.currentlyPlaying = false,
 			.renderWindow = RenderWindow(glm::vec2(), glm::vec2(BOX_RESOLUTION, BOX_RESOLUTION)),
@@ -341,14 +306,12 @@ int main() {
 			auto end = std::chrono::high_resolution_clock::now();
 			total_points += end - start;
 			count += 1;
-//			context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
 		}
 	});
 
 	customGlfwTimer.register_timer(0.1, [&] {
 		context.renderWindow += context.movement;
 		if (context.movement != glm::vec2(0, 0)) {
-//			context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
 			if (count != 0) {
 				std::cout << total_points.count() / count << "  " << context.lifeExecutor.count() << std::endl;
 				count = 0;
