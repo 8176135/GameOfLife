@@ -10,12 +10,14 @@
 #include <iostream>
 #include "unordered_set"
 #include <cmath>
+#include "concepts"
 
+template <typename T>
 struct Vector2 {
-	int x, y;
+	T x, y;
 
-	Vector2(int x, int y) : x(x), y(y) {};
-	Vector2(int scalar) : x(scalar), y(scalar) {};
+	Vector2(T x, T y) : x(x), y(y) {};
+	Vector2(T scalar) : x(scalar), y(scalar) {};
 
 //	Vector2(const Vector2& input) : x(input.x), y(input.y) {
 //		std:: cout << "YOLO" << std::endl;
@@ -59,21 +61,22 @@ private:
 	}
 };
 
-inline Vector2 operator+(Vector2 lhs, const Vector2 &rhs) {
+template <typename T>
+inline Vector2<T> operator+(Vector2<T> lhs, const Vector2<T> &rhs) {
 	lhs += rhs;
 	return lhs;
 }
 
-
-inline Vector2 operator-(Vector2 lhs, const Vector2 &rhs) {
+template <typename T>
+inline Vector2<T> operator-(Vector2<T> lhs, const Vector2<T> &rhs) {
 	lhs -= rhs;
 	return lhs;
 }
 
 namespace std {
-	template<>
-	struct hash<Vector2> {
-		std::size_t operator()(const Vector2 &k) const {
+	template<typename T>
+	struct hash<Vector2<T>> {
+		std::size_t operator()(const Vector2<T> &k) const {
 			using std::size_t;
 			using std::hash;
 

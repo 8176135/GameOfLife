@@ -20,18 +20,18 @@ public:
 	void randomize_field();
 
 	// Returns true new value was set;
-	bool setBit(Vector2 pos, bool newValue);
+	bool setBit(Vector2<int> pos, bool newValue);
 
 	unsigned long long count();
 
-	const std::unordered_set<Vector2>& live_cells_get();
+	const std::unordered_set<Vector2<int>>& live_cells_get();
 
 private:
-	std::unordered_map<Vector2, uint8_t> neighbours;
-	std::unordered_set<Vector2> live_cells_a;
-	std::unordered_set<Vector2> live_cells_b;
-	std::unordered_set<Vector2>* live_cells;
-	std::unordered_set<Vector2>* last_cells;
+	std::unordered_map<Vector2<int>, uint8_t> neighbours;
+	std::unordered_set<Vector2<int>> live_cells_a;
+	std::unordered_set<Vector2<int>> live_cells_b;
+	std::unordered_set<Vector2<int>>* live_cells;
+	std::unordered_set<Vector2<int>>* last_cells;
 
 };
 

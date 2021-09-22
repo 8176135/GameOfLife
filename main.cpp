@@ -3,28 +3,29 @@
 #include <cmath>
 #include <iostream>
 #include <chrono>
-#include "glm/glm.hpp"
-#include <glm/gtc/matrix_transform.hpp>
 #include "glad/glad.h"
 #include "GLFW/glfw3.h"
+#include "glm/glm.hpp"
+#include <glm/gtc/matrix_transform.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 
 #include "stb_image.h"
 
 #include "shader.h"
-#include "LifeExecutor.h"
 #include "CustomGlfwTimer.h"
-#include "RenderWindow.h"
+#include "ui/UiLayer.h"
 
-static void lineAlgo(Vector2 start, Vector2 end, const std::function<void(Vector2)> &applicator) {
-	auto delta = Vector2(std::abs(end.x - start.x), -std::abs(end.y - start.y));
+typedef Vector2<int> Vector2i;
+
+static void lineAlgo(Vector2i start, Vector2i end, const std::function<void(Vector2i)> &applicator) {
+	auto delta = Vector2i(std::abs(end.x - start.x), -std::abs(end.y - start.y));
 	auto stepX = start.x < end.x ? 1 : -1;
 	auto stepY = start.y < end.y ? 1 : -1;
 
 	auto diff = delta.x + delta.y;
 
-	Vector2 current{start};
+	Vector2i current{start};
 	while (true) {
 		applicator(current);
 		if (current == end) return;
@@ -41,21 +42,18 @@ static void lineAlgo(Vector2 start, Vector2 end, const std::function<void(Vector
 	}
 }
 
-struct CallbackContext {
-//	std::vector<uint8_t> textureDataArray;
-	LifeExecutor lifeExecutor;
-	bool currentlyPlaying;
-	RenderWindow renderWindow;
-	glm::vec2 movement;
-	glm::vec2 lastMousePos;
-	double zoomLevel;
+template<class... Ts>
+struct overload : Ts ... {
+	using Ts::operator()...;
 };
+template<class... Ts>
+overload(Ts...) -> overload<Ts...>;
 
 CallbackContext *get_context(GLFWwindow *w) {
 	return static_cast<CallbackContext *>(glfwGetWindowUserPointer(w));
 }
 
-static Vector2 convertToOffsetPos(CallbackContext const &context, glm::vec2 toConvert) {
+static Vector2i convertToOffsetPos(CallbackContext const &context, glm::vec2 toConvert) {
 	double mappedXpos = toConvert.x + context.renderWindow.top_left.x;
 	double mappedYpos = toConvert.y + context.renderWindow.top_left.y;
 	return {(int) std::round(mappedXpos), (int) std::round(mappedYpos)};
@@ -71,14 +69,14 @@ static std::optional<glm::vec2> getMappedCursorPos(CallbackContext const &contex
 	}
 }
 
-static std::optional<Vector2> getMappedCursorPosOffset(CallbackContext const &context, double xpos, double ypos) {
-	auto out = getMappedCursorPos(context, xpos, ypos);
-	if (!out.has_value()) {
-		return {};
-	} else {
-		return convertToOffsetPos(context, out.value());
-	}
-}
+//static std::optional<Vector2i> getMappedCursorPosOffset(CallbackContext const &context, double xpos, double ypos) {
+//	auto out = getMappedCursorPos(context, xpos, ypos);
+//	if (!out.has_value()) {
+//		return {};
+//	} else {
+//		return convertToOffsetPos(context, out.value());
+//	}
+//}
 
 
 namespace Callbacks {
@@ -128,15 +126,29 @@ namespace Callbacks {
 		if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT)) {
 			auto convertedPos = convertToOffsetPos(context, noOffsetMappedPos.value());
 			auto convertedLastPos = convertToOffsetPos(context, context.lastMousePos);
-			lineAlgo(convertedLastPos, convertedPos, [&](Vector2 current) {
-				(context.lifeExecutor.setBit(current, true));
-			});
 
+			lineAlgo(convertedLastPos, convertedPos, [&](Vector2i current) {
+				auto visitor = overload{
+						[&](const DrawingMode::Box &box) {
+						},
+						[&](const DrawingMode::Pencil &pencil) {
+							(context.lifeExecutor.setBit(current, true));
+						},
+				};
+				std::visit(visitor, context.currentDrawingMode);
+			});
 		} else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT)) {
 			auto convertedPos = convertToOffsetPos(context, noOffsetMappedPos.value());
 			auto convertedLastPos = convertToOffsetPos(context, context.lastMousePos);
-			lineAlgo(convertedLastPos, convertedPos, [&](Vector2 current) {
-				(context.lifeExecutor.setBit(current, false));
+			lineAlgo(convertedLastPos, convertedPos, [&](Vector2i current) {
+				auto visitor = overload{
+						[&](const DrawingMode::Box &box) {
+						},
+						[&](const DrawingMode::Pencil &pencil) {
+							(context.lifeExecutor.setBit(current, false));
+						},
+				};
+				std::visit(visitor, context.currentDrawingMode);
 			});
 		}
 
@@ -152,28 +164,54 @@ namespace Callbacks {
 	}
 
 	static void mouse_button_callback(GLFWwindow *window, int button, int action, [[maybe_unused]] int mods) {
+		CallbackContext &context = *get_context(window);
+		double xpos, ypos;
+		glfwGetCursorPos(window, &xpos, &ypos);
+		auto mappedPos = getMappedCursorPos(context, xpos, ypos);
+		if (!mappedPos.has_value()) {
+			return;
+		}
+		auto mappedPosOffset = convertToOffsetPos(context, mappedPos.value());
+
 		if ((button == GLFW_MOUSE_BUTTON_LEFT || button == GLFW_MOUSE_BUTTON_RIGHT) && action == GLFW_PRESS) {
-			CallbackContext &context = *get_context(window);
-			double xpos, ypos;
-			glfwGetCursorPos(window, &xpos, &ypos);
-			auto mappedPos = getMappedCursorPosOffset(context, xpos, ypos);
-			if (!mappedPos.has_value()) {
-				return;
-			}
-			if (context.lifeExecutor.setBit(mappedPos.value(), button == GLFW_MOUSE_BUTTON_LEFT)) {
-//				context.lifeExecutor.fill_texture(context.textureDataArray, context.renderWindow);
+			if (!context.uiLayer.checkClickCollision(context, xpos, ypos)) {
+				auto visitor = overload{
+						[&](DrawingMode::Box &box) {
+							box.startingPos = mappedPosOffset;
+						},
+						[&](const DrawingMode::Pencil &pencil) {
+							context.lifeExecutor.setBit(mappedPosOffset, button == GLFW_MOUSE_BUTTON_LEFT);
+						},
+				};
+				std::visit(visitor, context.currentDrawingMode);
+				context.wasClicked = true;
 			}
 		}
 
-		if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
-			CallbackContext &context = *get_context(window);
-			double xpos, ypos;
-			glfwGetCursorPos(window, &xpos, &ypos);
-			auto mappedPos = getMappedCursorPos(context, xpos, ypos);
-			if (!mappedPos.has_value()) {
-				return;
-			}
+		if ((button == GLFW_MOUSE_BUTTON_LEFT || button == GLFW_MOUSE_BUTTON_RIGHT) && action == GLFW_RELEASE && context.wasClicked) {
+			auto visitor = overload{
+					[&](DrawingMode::Box &box) {
+						if (mappedPosOffset.x < box.startingPos.x) {
+							std::swap(mappedPosOffset.x, box.startingPos.x);
+						}
+						if (mappedPosOffset.y < box.startingPos.y) {
+							std::swap(mappedPosOffset.y, box.startingPos.y);
+						}
+						for (int y = box.startingPos.y; y < mappedPosOffset.y; ++y) {
+							for (int x = box.startingPos.x; x < mappedPosOffset.x; ++x) {
+								context.lifeExecutor.setBit(Vector2i(x, y), button == GLFW_MOUSE_BUTTON_LEFT);
+							}
+						}
+					},
+					[&](const DrawingMode::Pencil &pencil) {
+						context.lifeExecutor.setBit(mappedPosOffset, button == GLFW_MOUSE_BUTTON_LEFT);
+					},
+			};
+			std::visit(visitor, context.currentDrawingMode);
+			context.wasClicked = false;
+		}
 
+		if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
 			if (action == GLFW_PRESS) {
 				context.lastMousePos = mappedPos.value();
 			} else if (action == GLFW_RELEASE) {
@@ -190,7 +228,7 @@ namespace Callbacks {
 //		glfwGetCursorPos(window, &xpos, &ypos);
 
 		auto middle = context.renderWindow.get_middle();
-		auto offset = glm::vec2((float)(DEFAULT_BOX_RESOLUTION * context.zoomLevel * 0.5));
+		auto offset = glm::vec2((float) (DEFAULT_BOX_RESOLUTION * context.zoomLevel * 0.5));
 
 		context.renderWindow.top_left = middle - offset;
 		context.renderWindow.bottom_right = middle + offset;
@@ -207,15 +245,6 @@ int main() {
 
 	glfwSetErrorCallback(Callbacks::error_callback);
 
-	CallbackContext context = {
-			.lifeExecutor = LifeExecutor(DEFAULT_BOX_RESOLUTION),
-			.currentlyPlaying = false,
-			.renderWindow = RenderWindow(glm::vec2(), glm::vec2(DEFAULT_BOX_RESOLUTION, DEFAULT_BOX_RESOLUTION)),
-			.movement = glm::vec2(),
-			.lastMousePos = glm::vec2(0, 0),
-			.zoomLevel = 1,
-	};
-
 	/* Create a windowed mode window and its OpenGL context */
 	glfwWindowHint(GLFW_SAMPLES, 8);
 	GLFWwindow *window = glfwCreateWindow(WINDOW_SIZE, WINDOW_SIZE, "Hello World", nullptr, nullptr);
@@ -223,8 +252,6 @@ int main() {
 		glfwTerminate();
 		return -1;
 	}
-
-	glfwSetWindowUserPointer(window, &context);
 
 	/* Make the window's context current */
 	glfwMakeContextCurrent(window);
@@ -234,6 +261,18 @@ int main() {
 		return -1;
 	}
 
+	CallbackContext context = {
+			.lifeExecutor = LifeExecutor(DEFAULT_BOX_RESOLUTION),
+			.currentlyPlaying = false,
+			.wasClicked = false,
+			.renderWindow = RenderWindow(glm::vec2(), glm::vec2(DEFAULT_BOX_RESOLUTION, DEFAULT_BOX_RESOLUTION)),
+			.movement = glm::vec2(),
+			.lastMousePos = glm::vec2(0, 0),
+			.zoomLevel = 1,
+			.currentDrawingMode = DrawingMode::Box(),
+			.uiLayer = UiLayer(),
+	};
+
 	glEnable(GL_MULTISAMPLE);
 
 	glfwSwapInterval(1);
@@ -242,11 +281,10 @@ int main() {
 	glfwSetCursorPosCallback(window, Callbacks::cursor_position_callback);
 	glfwSetScrollCallback(window, Callbacks::scroll_callback);
 
-	Shader golShader("vertex.glsl", "frag.glsl");
 
-	GLuint vertexArrayId;
-	glGenVertexArrays(1, &vertexArrayId);
-	glBindVertexArray(vertexArrayId);
+	glfwSetWindowUserPointer(window, &context);
+
+	Shader golShader("vertex.glsl", "frag.glsl");
 
 	const GLfloat vertices[] = {
 			// Positions,       Texture Coord
@@ -358,7 +396,8 @@ int main() {
 		golShader.use();
 
 		glm::mat4 projection = glm::mat4(1.0f);
-		projection = glm::ortho(context.renderWindow.top_left.x, context.renderWindow.bottom_right.x, context.renderWindow.bottom_right.y, context.renderWindow.top_left.y, 0.1f, 100.0f);
+		projection = glm::ortho(context.renderWindow.top_left.x, context.renderWindow.bottom_right.x,
+								context.renderWindow.bottom_right.y, context.renderWindow.top_left.y, 0.1f, 100.0f);
 
 		golShader.setMat4("projection", projection);
 
@@ -371,6 +410,8 @@ int main() {
 
 			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0); // NOLINT(mod
 		}
+
+		context.uiLayer.RenderLayer();
 
 		/* Swap front and back buffers */
 		glfwSwapBuffers(window);
@@ -385,7 +426,3 @@ int main() {
 	glfwTerminate();
 	return 0;
 }
-
-
-
-

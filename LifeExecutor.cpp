@@ -23,7 +23,7 @@ static unsigned int seed_val = 101;
 ////	return dataArray;
 //}
 
-static void generateRandomArray(std::unordered_set<Vector2> &toSet, Vector2 bounds, int min, int max) {
+static void generateRandomArray(std::unordered_set<Vector2<int>> &toSet, Vector2<int> bounds, int min, int max) {
 	typedef std::mt19937 MyRngImpl;  // the Mersenne Twister with a popular choice of parameters
 	seed_val += 1;
 	MyRngImpl rng(seed_val);
@@ -38,14 +38,15 @@ static void generateRandomArray(std::unordered_set<Vector2> &toSet, Vector2 boun
 }
 
 LifeExecutor::LifeExecutor(int reserve_size) {
-	live_cells_a = std::unordered_set<Vector2>(reserve_size);
-	live_cells_b = std::unordered_set<Vector2>(reserve_size);
-	neighbours = std::unordered_map<Vector2, uint8_t>(reserve_size * 8);
+	live_cells_a = std::unordered_set<Vector2<int>>(reserve_size);
+	live_cells_b = std::unordered_set<Vector2<int>>(reserve_size);
+	neighbours = std::unordered_map<Vector2<int>, uint8_t>(reserve_size * 8);
 
 	last_cells = &live_cells_b;
 	live_cells = &live_cells_a;
 
-	generateRandomArray(*live_cells, Vector2(DEFAULT_BOX_RESOLUTION, DEFAULT_BOX_RESOLUTION), 0, DEFAULT_BOX_RESOLUTION * DEFAULT_BOX_RESOLUTION);
+	generateRandomArray(*live_cells, Vector2(DEFAULT_BOX_RESOLUTION, DEFAULT_BOX_RESOLUTION), 0,
+						DEFAULT_BOX_RESOLUTION * DEFAULT_BOX_RESOLUTION);
 }
 
 void LifeExecutor::next_step() {
@@ -91,10 +92,11 @@ void LifeExecutor::next_step() {
 
 void LifeExecutor::randomize_field() {
 	live_cells->clear();
-	generateRandomArray(*live_cells, Vector2(DEFAULT_BOX_RESOLUTION, DEFAULT_BOX_RESOLUTION), 0, DEFAULT_BOX_RESOLUTION * DEFAULT_BOX_RESOLUTION);
+	generateRandomArray(*live_cells, Vector2(DEFAULT_BOX_RESOLUTION, DEFAULT_BOX_RESOLUTION), 0,
+						DEFAULT_BOX_RESOLUTION * DEFAULT_BOX_RESOLUTION);
 }
 
-bool LifeExecutor::setBit(Vector2 pos, bool newValue) {
+bool LifeExecutor::setBit( Vector2<int> pos, bool newValue) {
 	auto retVal = live_cells->contains(pos);
 	if (retVal == newValue) {
 		return false;
@@ -113,6 +115,6 @@ unsigned long long LifeExecutor::count() {
 	return live_cells->size();
 }
 
-const std::unordered_set<Vector2> &LifeExecutor::live_cells_get() {
+const std::unordered_set< Vector2<int>> &LifeExecutor::live_cells_get() {
 	return *this->live_cells;
 }
