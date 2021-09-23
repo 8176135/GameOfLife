@@ -9,17 +9,37 @@
 #include <vector>
 #include <functional>
 #include "../shader.h"
+#include "unordered_set"
+
+enum class ButtonState {
+	Hover,
+	Active, // (De)Pressed,
+	None,
+};
+
+struct ButtonInfo {
+	glm::mat4 elementTransform;
+	std::function<void(CallbackContext &)> callback;
+	ButtonState currentState;
+	std::unordered_set<int> mouseButtonDown;
+//	TextureData ,
+};
 
 class UiLayer {
 	Shader uiShader;
-	std::vector<glm::mat4> elementTransforms;
-	std::vector<std::function<void (CallbackContext&) >> buttonCallbacks;
+	std::vector<ButtonInfo> buttons;
 
 public:
 	UiLayer();
+
 	void RenderLayer();
+
 	/// Returns true if hit a ui element, so stop propagating.
-	bool checkClickCollision(CallbackContext& context, double xpos, double ypos);
+	bool clickButtonCheck(CallbackContext &context, double xpos, double ypos, int mouseButton, bool pressed);
+	bool cursorMoveButtonCheck(double xpos, double ypos);
+
+private:
+	static bool checkClickCollisionForButton(ButtonInfo &button, double xpos, double ypos);
 };
 
 

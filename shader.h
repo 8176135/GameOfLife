@@ -30,6 +30,8 @@ public:
 	Shader& operator=(const Shader& original) = delete;
 
 	virtual ~Shader();
+
+	void setVec3(const std::string &name, const glm::vec3 &value);
 };
 
 

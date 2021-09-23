@@ -123,6 +123,8 @@ namespace Callbacks {
 			return;
 		}
 
+		context.uiLayer.cursorMoveButtonCheck(xpos, ypos);
+
 		if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT)) {
 			auto convertedPos = convertToOffsetPos(context, noOffsetMappedPos.value());
 			auto convertedLastPos = convertToOffsetPos(context, context.lastMousePos);
@@ -174,7 +176,7 @@ namespace Callbacks {
 		auto mappedPosOffset = convertToOffsetPos(context, mappedPos.value());
 
 		if ((button == GLFW_MOUSE_BUTTON_LEFT || button == GLFW_MOUSE_BUTTON_RIGHT) && action == GLFW_PRESS) {
-			if (!context.uiLayer.checkClickCollision(context, xpos, ypos)) {
+			if (!context.uiLayer.clickButtonCheck(context, xpos, ypos, button, true)) {
 				auto visitor = overload{
 						[&](DrawingMode::Box &box) {
 							box.startingPos = mappedPosOffset;
@@ -188,8 +190,12 @@ namespace Callbacks {
 			}
 		}
 
-		if ((button == GLFW_MOUSE_BUTTON_LEFT || button == GLFW_MOUSE_BUTTON_RIGHT) && action == GLFW_RELEASE && context.wasClicked) {
-			auto visitor = overload{
+		if ((button == GLFW_MOUSE_BUTTON_LEFT || button == GLFW_MOUSE_BUTTON_RIGHT) && action == GLFW_RELEASE) {
+
+			context.uiLayer.clickButtonCheck(context, xpos, ypos, button, false);
+
+			if (context.wasClicked) {
+				auto visitor = overload{
 					[&](DrawingMode::Box &box) {
 						if (mappedPosOffset.x < box.startingPos.x) {
 							std::swap(mappedPosOffset.x, box.startingPos.x);
@@ -202,13 +208,14 @@ namespace Callbacks {
 								context.lifeExecutor.setBit(Vector2i(x, y), button == GLFW_MOUSE_BUTTON_LEFT);
 							}
 						}
-					},
-					[&](const DrawingMode::Pencil &pencil) {
+						},
+						[&](const DrawingMode::Pencil &pencil) {
 						context.lifeExecutor.setBit(mappedPosOffset, button == GLFW_MOUSE_BUTTON_LEFT);
-					},
-			};
-			std::visit(visitor, context.currentDrawingMode);
-			context.wasClicked = false;
+						},
+						};
+				std::visit(visitor, context.currentDrawingMode);
+				context.wasClicked = false;
+			}
 		}
 
 		if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
