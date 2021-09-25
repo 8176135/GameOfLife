@@ -125,7 +125,7 @@ namespace Callbacks {
 
 		context.uiLayer.cursorMoveButtonCheck(xpos, ypos);
 
-		if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT)) {
+		if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) && context.wasClicked) {
 			auto convertedPos = convertToOffsetPos(context, noOffsetMappedPos.value());
 			auto convertedLastPos = convertToOffsetPos(context, context.lastMousePos);
 
@@ -139,7 +139,7 @@ namespace Callbacks {
 				};
 				std::visit(visitor, context.currentDrawingMode);
 			});
-		} else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT)) {
+		} else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) && context.wasClicked) {
 			auto convertedPos = convertToOffsetPos(context, noOffsetMappedPos.value());
 			auto convertedLastPos = convertToOffsetPos(context, context.lastMousePos);
 			lineAlgo(convertedLastPos, convertedPos, [&](Vector2i current) {
@@ -227,7 +227,7 @@ namespace Callbacks {
 		}
 	}
 
-	static void scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
+	static void scroll_callback(GLFWwindow *window, [[maybe_unused]] double xoffset, double yoffset) {
 		CallbackContext &context = *get_context(window);
 		context.zoomLevel -= yoffset * 0.1;
 
@@ -239,7 +239,6 @@ namespace Callbacks {
 
 		context.renderWindow.top_left = middle - offset;
 		context.renderWindow.bottom_right = middle + offset;
-		std::cout << context.renderWindow.debug() << std::endl;
 	}
 
 }

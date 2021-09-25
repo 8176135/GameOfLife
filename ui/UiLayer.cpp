@@ -11,7 +11,7 @@
 
 UiLayer::UiLayer() : uiShader(Shader("ui/vertex_ui.glsl", "ui/frag_ui.glsl")) {
 	glm::mat4 transform(1.0f);
-	transform = glm::translate(transform, glm::vec3(-1, 1, 0));
+	transform = glm::translate(transform, glm::vec3(-0.9, 0.9, 0));
 	transform = glm::scale(transform, glm::vec3(0.1, 0.1, 1));
 	transform = glm::translate(transform, glm::vec3(0.5, -0.5, 0));
 
@@ -23,7 +23,6 @@ UiLayer::UiLayer() : uiShader(Shader("ui/vertex_ui.glsl", "ui/frag_ui.glsl")) {
 				} else if (std::holds_alternative<DrawingMode::Pencil>(context.currentDrawingMode)) {
 					context.currentDrawingMode = DrawingMode::Box{};
 				}
-				//		std::cout << "YOLO" << std::endl;
 			},
 			.currentState = ButtonState::None,
 	});
@@ -63,7 +62,6 @@ bool UiLayer::clickButtonCheck(CallbackContext &context, double xpos, double ypo
 		bool wasPressed;
 		if (!pressed) {
 			wasPressed = button.mouseButtonDown.erase(mouseButton) > 0;
-			std::cout << wasPressed << std::endl;
 		}
 
 		if (!checkClickCollisionForButton(button, xpos, ypos)) {
@@ -94,7 +92,6 @@ bool UiLayer::cursorMoveButtonCheck(double xpos, double ypos) {
 			button.currentState = checkClickCollisionForButton(button, xpos, ypos) ? ButtonState::Hover
 																				   : ButtonState::None;
 		}
-
 	}
 	return false;
 }
@@ -111,7 +108,7 @@ bool UiLayer::checkClickCollisionForButton(ButtonInfo &button, double xpos, doub
 
 	return (positionTopLeft.x > mappedPos.x &&
 			positionBottomRight.x < mappedPos.x &&
-			positionTopLeft.y > mappedPos.x &&
+			positionTopLeft.y > mappedPos.y &&
 			positionBottomRight.y < mappedPos.y);
 }
 
