@@ -10,6 +10,7 @@
 #include "glm/glm.hpp"
 #include "ui/UiLayer.h"
 #include <variant>
+#include "mutex"
 
 //inline const int DEFAULT_BOX_RESOLUTION = 128;
 inline const int DEFAULT_BOX_RESOLUTION = 128;

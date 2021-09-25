@@ -5,6 +5,9 @@
 #ifndef GAME_OF_LIFE_LIFEEXECUTOR_H
 #define GAME_OF_LIFE_LIFEEXECUTOR_H
 
+#include <unordered_set>
+#include <mutex>
+#include "functional"
 #include "vector"
 #include "unordered_map"
 #include "unordered_set"
@@ -24,7 +27,12 @@ public:
 
 	unsigned long long count();
 
-	const std::unordered_set<Vector2<int>>& live_cells_get();
+	void iterate_over_cells(const std::function<void(const Vector2<int>&)>& to_execute);
+//	const std::unordered_set<Vector2<int>> &live_cells_get();
+
+	// TODO: Fix this shortcut
+	std::mutex full_lock;
+
 
 private:
 	std::unordered_map<Vector2<int>, uint8_t> neighbours;
@@ -33,6 +41,7 @@ private:
 	std::unordered_set<Vector2<int>>* live_cells;
 	std::unordered_set<Vector2<int>>* last_cells;
 
+	std::mutex swap_lock;
 };
 
 

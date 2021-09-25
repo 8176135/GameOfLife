@@ -51,6 +51,7 @@ LifeExecutor::LifeExecutor(int reserve_size) {
 
 void LifeExecutor::next_step() {
 	neighbours.clear();
+	std::scoped_lock fl{full_lock};
 	for (const auto &item : *live_cells) {
 
 		for (int i1 = -1; i1 < 2; ++i1) {
@@ -70,9 +71,12 @@ void LifeExecutor::next_step() {
 			last_cells->insert(item.first);
 		}
 	}
-
-	std::swap(live_cells, last_cells);
+	{
+		std::scoped_lock sl{this->swap_lock};
+		std::swap(live_cells, last_cells);
+	}
 }
+
 
 //void LifeExecutor::fill_texture(std::vector<uint8_t> &input_array, const RenderWindow &render_window) {
 //	std::fill(std::begin(input_array), std::end(input_array), '\0');
@@ -91,7 +95,9 @@ void LifeExecutor::next_step() {
 //}
 
 void LifeExecutor::randomize_field() {
+	std::scoped_lock m{full_lock, swap_lock};
 	live_cells->clear();
+	last_cells->clear();
 	generateRandomArray(*live_cells, Vector2(DEFAULT_BOX_RESOLUTION, DEFAULT_BOX_RESOLUTION), 0,
 						DEFAULT_BOX_RESOLUTION * DEFAULT_BOX_RESOLUTION);
 }
@@ -115,6 +121,10 @@ unsigned long long LifeExecutor::count() {
 	return live_cells->size();
 }
 
-const std::unordered_set< Vector2<int>> &LifeExecutor::live_cells_get() {
-	return *this->live_cells;
+void LifeExecutor::iterate_over_cells(const std::function<void(const Vector2<int> &)>& to_execute) {
+	std::scoped_lock m{swap_lock};
+
+	for (const auto &item : *live_cells) {
+		to_execute(item);
+	}
 }

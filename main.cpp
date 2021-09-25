@@ -7,6 +7,8 @@
 #include "GLFW/glfw3.h"
 #include "glm/glm.hpp"
 #include <glm/gtc/matrix_transform.hpp>
+#include "mutex"
+#include "thread"
 
 #define STB_IMAGE_IMPLEMENTATION
 
@@ -89,13 +91,12 @@ namespace Callbacks {
 		if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 			glfwSetWindowShouldClose(window, GLFW_TRUE);
 
-		CallbackContext *context = get_context(window);
+		CallbackContext &context = *get_context(window);
 
 		if (key == GLFW_KEY_P && action == GLFW_PRESS) {
-			context->lifeExecutor.randomize_field();
-//			context->lifeExecutor.fill_texture(context->textureDataArray, context->renderWindow);
+			context.lifeExecutor.randomize_field();
 		} else if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
-			context->currentlyPlaying = !context->currentlyPlaying;
+			context.currentlyPlaying = !context.currentlyPlaying;
 		} else {
 			int change = 0;
 			if (action == GLFW_PRESS) {
@@ -104,13 +105,13 @@ namespace Callbacks {
 				change = -1;
 			}
 			if (key == GLFW_KEY_LEFT) {
-				context->movement.x -= change;
+				context.movement.x -= change;
 			} else if (key == GLFW_KEY_RIGHT) {
-				context->movement.x += change;
+				context.movement.x += change;
 			} else if (key == GLFW_KEY_DOWN) {
-				context->movement.y -= change;
+				context.movement.y -= change;
 			} else if (key == GLFW_KEY_UP) {
-				context->movement.y += change;
+				context.movement.y += change;
 			}
 		}
 	}
@@ -129,6 +130,8 @@ namespace Callbacks {
 			auto convertedPos = convertToOffsetPos(context, noOffsetMappedPos.value());
 			auto convertedLastPos = convertToOffsetPos(context, context.lastMousePos);
 
+			std::scoped_lock m{context.lifeExecutor.full_lock};
+
 			lineAlgo(convertedLastPos, convertedPos, [&](Vector2i current) {
 				auto visitor = overload{
 						[&](const DrawingMode::Box &box) {
@@ -142,6 +145,8 @@ namespace Callbacks {
 		} else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) && context.wasClicked) {
 			auto convertedPos = convertToOffsetPos(context, noOffsetMappedPos.value());
 			auto convertedLastPos = convertToOffsetPos(context, context.lastMousePos);
+			std::scoped_lock m{context.lifeExecutor.full_lock};
+
 			lineAlgo(convertedLastPos, convertedPos, [&](Vector2i current) {
 				auto visitor = overload{
 						[&](const DrawingMode::Box &box) {
@@ -167,6 +172,7 @@ namespace Callbacks {
 
 	static void mouse_button_callback(GLFWwindow *window, int button, int action, [[maybe_unused]] int mods) {
 		CallbackContext &context = *get_context(window);
+
 		double xpos, ypos;
 		glfwGetCursorPos(window, &xpos, &ypos);
 		auto mappedPos = getMappedCursorPos(context, xpos, ypos);
@@ -177,6 +183,7 @@ namespace Callbacks {
 
 		if ((button == GLFW_MOUSE_BUTTON_LEFT || button == GLFW_MOUSE_BUTTON_RIGHT) && action == GLFW_PRESS) {
 			if (!context.uiLayer.clickButtonCheck(context, xpos, ypos, button, true)) {
+				std::scoped_lock m{context.lifeExecutor.full_lock};
 				auto visitor = overload{
 						[&](DrawingMode::Box &box) {
 							box.startingPos = mappedPosOffset;
@@ -195,24 +202,25 @@ namespace Callbacks {
 			context.uiLayer.clickButtonCheck(context, xpos, ypos, button, false);
 
 			if (context.wasClicked) {
+				std::scoped_lock m{context.lifeExecutor.full_lock};
 				auto visitor = overload{
-					[&](DrawingMode::Box &box) {
-						if (mappedPosOffset.x < box.startingPos.x) {
-							std::swap(mappedPosOffset.x, box.startingPos.x);
-						}
-						if (mappedPosOffset.y < box.startingPos.y) {
-							std::swap(mappedPosOffset.y, box.startingPos.y);
-						}
-						for (int y = box.startingPos.y; y < mappedPosOffset.y; ++y) {
-							for (int x = box.startingPos.x; x < mappedPosOffset.x; ++x) {
-								context.lifeExecutor.setBit(Vector2i(x, y), button == GLFW_MOUSE_BUTTON_LEFT);
+						[&](DrawingMode::Box &box) {
+							if (mappedPosOffset.x < box.startingPos.x) {
+								std::swap(mappedPosOffset.x, box.startingPos.x);
 							}
-						}
+							if (mappedPosOffset.y < box.startingPos.y) {
+								std::swap(mappedPosOffset.y, box.startingPos.y);
+							}
+							for (int y = box.startingPos.y; y < mappedPosOffset.y; ++y) {
+								for (int x = box.startingPos.x; x < mappedPosOffset.x; ++x) {
+									context.lifeExecutor.setBit(Vector2i(x, y), button == GLFW_MOUSE_BUTTON_LEFT);
+								}
+							}
 						},
 						[&](const DrawingMode::Pencil &pencil) {
-						context.lifeExecutor.setBit(mappedPosOffset, button == GLFW_MOUSE_BUTTON_LEFT);
+							context.lifeExecutor.setBit(mappedPosOffset, button == GLFW_MOUSE_BUTTON_LEFT);
 						},
-						};
+				};
 				std::visit(visitor, context.currentDrawingMode);
 				context.wasClicked = false;
 			}
@@ -229,6 +237,7 @@ namespace Callbacks {
 
 	static void scroll_callback(GLFWwindow *window, [[maybe_unused]] double xoffset, double yoffset) {
 		CallbackContext &context = *get_context(window);
+
 		context.zoomLevel -= yoffset * 0.1;
 
 //		double xpos, ypos;
@@ -359,29 +368,43 @@ int main() {
 		frameCounter = 0;
 	});
 
-	std::chrono::duration total_points = std::chrono::duration<long long int, std::nano>::zero();
-	int count = 0;
+//	std::chrono::duration total_points = std::chrono::duration<long long int, std::nano>::zero();
+//	int count = 0;
 
-	customGlfwTimer.register_timer(0.025, [&] {
-		if (context.currentlyPlaying) {
-			auto start = std::chrono::high_resolution_clock::now();
-			context.lifeExecutor.next_step();
-			auto end = std::chrono::high_resolution_clock::now();
-			total_points += end - start;
-			count += 1;
-		}
-	});
-
-	customGlfwTimer.register_timer(0.1, [&] {
-		context.renderWindow += context.movement;
-		if (context.movement != glm::vec2(0, 0)) {
-			if (count != 0) {
-				std::cout << total_points.count() / count << "  " << context.lifeExecutor.count() << std::endl;
-				count = 0;
-				total_points = std::chrono::duration<long long int, std::nano>::zero();
+	std::atomic<bool> stop_thread = false;
+	std::thread lifePlayerThread{[&] {
+		auto lastTime = glfwGetTime();
+		while (!stop_thread) {
+			auto currentTime = glfwGetTime();
+			if (currentTime - lastTime > 0.025) {
+				lastTime = currentTime;
+				if (context.currentlyPlaying) {
+					context.lifeExecutor.next_step();
+				}
 			}
 		}
-	});
+	}};
+
+//	customGlfwTimer.register_timer(0.025, [&] {
+//		if (context.currentlyPlaying) {
+//			auto start = std::chrono::high_resolution_clock::now();
+//			context.lifeExecutor.next_step();
+//			auto end = std::chrono::high_resolution_clock::now();
+//			total_points += end - start;
+//			count += 1;
+//		}
+//	});
+
+//	customGlfwTimer.register_timer(0.1, [&] {
+//		context.renderWindow += context.movement;
+//		if (context.movement != glm::vec2(0, 0)) {
+//			if (count != 0) {
+//				std::cout << total_points.count() / count << "  " << context.lifeExecutor.count() << std::endl;
+//				count = 0;
+//				total_points = std::chrono::duration<long long int, std::nano>::zero();
+//			}
+//		}
+//	});
 
 	glm::mat4 view = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
 	view = glm::translate(view, glm::vec3(0, 0, -1.0));
@@ -401,6 +424,7 @@ int main() {
 
 		golShader.use();
 
+
 		glm::mat4 projection = glm::mat4(1.0f);
 		projection = glm::ortho(context.renderWindow.top_left.x, context.renderWindow.bottom_right.x,
 								context.renderWindow.bottom_right.y, context.renderWindow.top_left.y, 0.1f, 100.0f);
@@ -408,14 +432,16 @@ int main() {
 		golShader.setMat4("projection", projection);
 
 		glBindVertexArray(vaoId);
-		for (const auto &item : context.lifeExecutor.live_cells_get()) {
+
+		context.lifeExecutor.iterate_over_cells([&](const Vector2i &item) {
 			// calculate the model matrix for each object and pass it to shader before drawing
 			glm::mat4 position = glm::mat4(1.0f);
 			position = glm::translate(position, glm::vec3(item.x, item.y, 0));
 			golShader.setMat4("position", position);
 
 			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0); // NOLINT(mod
-		}
+		});
+
 
 		context.uiLayer.RenderLayer();
 
@@ -428,7 +454,8 @@ int main() {
 		/* Poll for and process events */
 		glfwPollEvents();
 	}
-
+	stop_thread = true;
+	lifePlayerThread.join();
 	glfwTerminate();
 	return 0;
 }
