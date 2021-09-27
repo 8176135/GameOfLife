@@ -27,8 +27,8 @@ namespace DrawingMode {
 	};
 
 	struct Box {
-		Vector2<int> startingPos;
-		Box() : startingPos(0) {};
+		std::optional<Vector2<int>> startingPos;
+		Box() : startingPos({}) {};
 	};
 }
 

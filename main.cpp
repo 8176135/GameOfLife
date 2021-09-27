@@ -1,22 +1,17 @@
-#include "main.h"
-
 #include <cmath>
 #include <iostream>
-#include <chrono>
 #include "glad/glad.h"
 #include "GLFW/glfw3.h"
 #include "glm/glm.hpp"
 #include <glm/gtc/matrix_transform.hpp>
-#include "mutex"
 #include "thread"
 
 #define STB_IMAGE_IMPLEMENTATION
 
 #include "stb_image.h"
 
-#include "shader.h"
+#include "main.h"
 #include "CustomGlfwTimer.h"
-#include "ui/UiLayer.h"
 
 typedef Vector2<int> Vector2i;
 
@@ -205,14 +200,20 @@ namespace Callbacks {
 				std::scoped_lock m{context.lifeExecutor.full_lock};
 				auto visitor = overload{
 						[&](DrawingMode::Box &box) {
-							if (mappedPosOffset.x < box.startingPos.x) {
-								std::swap(mappedPosOffset.x, box.startingPos.x);
+							if (!box.startingPos.has_value()) {
+								return;
 							}
-							if (mappedPosOffset.y < box.startingPos.y) {
-								std::swap(mappedPosOffset.y, box.startingPos.y);
+							auto currentOffset = mappedPosOffset + Vector2i (1);
+							auto startingPos = box.startingPos.value();
+							box.startingPos.reset();
+							if (currentOffset.x < startingPos.x) {
+								std::swap(currentOffset.x, startingPos.x);
 							}
-							for (int y = box.startingPos.y; y < mappedPosOffset.y; ++y) {
-								for (int x = box.startingPos.x; x < mappedPosOffset.x; ++x) {
+							if (currentOffset.y < startingPos.y) {
+								std::swap(currentOffset.y, startingPos.y);
+							}
+							for (int y = startingPos.y; y < currentOffset.y; ++y) {
+								for (int x = startingPos.x; x < currentOffset.x; ++x) {
 									context.lifeExecutor.setBit(Vector2i(x, y), button == GLFW_MOUSE_BUTTON_LEFT);
 								}
 							}
@@ -365,6 +366,8 @@ int main() {
 
 	customGlfwTimer.register_timer(1, [&] {
 		std::cout << "Frames per second: " << frameCounter << std::endl;
+		// TODO: Probably should lock here, otherwise a swap could happen while accessing count, unlikely though.
+		std::cout << "Count: " << context.lifeExecutor.count() << std::endl;
 		frameCounter = 0;
 	});
 
@@ -384,27 +387,6 @@ int main() {
 			}
 		}
 	}};
-
-//	customGlfwTimer.register_timer(0.025, [&] {
-//		if (context.currentlyPlaying) {
-//			auto start = std::chrono::high_resolution_clock::now();
-//			context.lifeExecutor.next_step();
-//			auto end = std::chrono::high_resolution_clock::now();
-//			total_points += end - start;
-//			count += 1;
-//		}
-//	});
-
-//	customGlfwTimer.register_timer(0.1, [&] {
-//		context.renderWindow += context.movement;
-//		if (context.movement != glm::vec2(0, 0)) {
-//			if (count != 0) {
-//				std::cout << total_points.count() / count << "  " << context.lifeExecutor.count() << std::endl;
-//				count = 0;
-//				total_points = std::chrono::duration<long long int, std::nano>::zero();
-//			}
-//		}
-//	});
 
 	glm::mat4 view = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
 	view = glm::translate(view, glm::vec3(0, 0, -1.0));
@@ -435,13 +417,55 @@ int main() {
 
 		context.lifeExecutor.iterate_over_cells([&](const Vector2i &item) {
 			// calculate the model matrix for each object and pass it to shader before drawing
-			glm::mat4 position = glm::mat4(1.0f);
-			position = glm::translate(position, glm::vec3(item.x, item.y, 0));
-			golShader.setMat4("position", position);
 
-			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0); // NOLINT(mod
+			if (context.renderWindow.top_left.x - 1 < item.x
+			&& context.renderWindow.bottom_right.x + 1> item.x
+			&& context.renderWindow.top_left.y - 1 < item.y
+			&& context.renderWindow.bottom_right.y + 1 > item.y
+			) {
+				glm::mat4 position = glm::mat4(1.0f);
+				position = glm::translate(position, glm::vec3(item.x, item.y, 0));
+				golShader.setMat4("position", position);
+
+				glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0); // NOLINT(mod
+			}
 		});
+		{
+			double xpos, ypos;
+			glfwGetCursorPos(window, &xpos, &ypos);
+			auto mappedPos = getMappedCursorPos(context, xpos, ypos);
+			if (mappedPos.has_value()) {
+				auto mappedPosOffset = convertToOffsetPos(context, mappedPos.value());
+				auto visitor = overload{
+						[&](DrawingMode::Box &box) {
+							if (!box.startingPos.has_value()) {
+								return;
+							}
+							auto currentOffset = mappedPosOffset + Vector2i (1);
+							auto startingPos = box.startingPos.value();
+							if (currentOffset.x < startingPos.x) {
+								std::swap(currentOffset.x, startingPos.x);
+							}
+							if (currentOffset.y < startingPos.y) {
+								std::swap(currentOffset.y, startingPos.y);
+							}
 
+							glm::mat4 transform = glm::mat4(1.0f);
+							transform = glm::translate(transform, glm::vec3(startingPos.x - 0.5, startingPos.y - 0.5, 0));
+							transform = glm::scale(transform, glm::vec3(currentOffset.x - startingPos.x,
+																		currentOffset.y - startingPos.y, 1));
+							transform = glm::translate(transform, glm::vec3(0.5, 0.5, 0));
+							golShader.setMat4("position", transform);
+
+							glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0); // NOLINT(mod
+						},
+						[&](const DrawingMode::Pencil &pencil) {
+						},
+				};
+
+				std::visit(visitor, context.currentDrawingMode);
+			}
+		}
 
 		context.uiLayer.RenderLayer();
 
