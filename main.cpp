@@ -203,7 +203,7 @@ namespace Callbacks {
 							if (!box.startingPos.has_value()) {
 								return;
 							}
-							auto currentOffset = mappedPosOffset + Vector2i (1);
+							auto currentOffset = mappedPosOffset + Vector2i(1);
 							auto startingPos = box.startingPos.value();
 							box.startingPos.reset();
 							if (currentOffset.x < startingPos.x) {
@@ -412,6 +412,8 @@ int main() {
 								context.renderWindow.bottom_right.y, context.renderWindow.top_left.y, 0.1f, 100.0f);
 
 		golShader.setMat4("projection", projection);
+		golShader.setVec3("color", glm::vec3(1));
+		golShader.setFloat("borderWidth", 0.1);
 
 		glBindVertexArray(vaoId);
 
@@ -419,10 +421,10 @@ int main() {
 			// calculate the model matrix for each object and pass it to shader before drawing
 
 			if (context.renderWindow.top_left.x - 1 < item.x
-			&& context.renderWindow.bottom_right.x + 1> item.x
-			&& context.renderWindow.top_left.y - 1 < item.y
-			&& context.renderWindow.bottom_right.y + 1 > item.y
-			) {
+				&& context.renderWindow.bottom_right.x + 1 > item.x
+				&& context.renderWindow.top_left.y - 1 < item.y
+				&& context.renderWindow.bottom_right.y + 1 > item.y
+					) {
 				glm::mat4 position = glm::mat4(1.0f);
 				position = glm::translate(position, glm::vec3(item.x, item.y, 0));
 				golShader.setMat4("position", position);
@@ -441,7 +443,7 @@ int main() {
 							if (!box.startingPos.has_value()) {
 								return;
 							}
-							auto currentOffset = mappedPosOffset + Vector2i (1);
+							auto currentOffset = mappedPosOffset + Vector2i(1);
 							auto startingPos = box.startingPos.value();
 							if (currentOffset.x < startingPos.x) {
 								std::swap(currentOffset.x, startingPos.x);
@@ -451,11 +453,17 @@ int main() {
 							}
 
 							glm::mat4 transform = glm::mat4(1.0f);
-							transform = glm::translate(transform, glm::vec3(startingPos.x - 0.5, startingPos.y - 0.5, 0));
+							transform = glm::translate(transform,
+													   glm::vec3(startingPos.x - 0.5, startingPos.y - 0.5, 0));
 							transform = glm::scale(transform, glm::vec3(currentOffset.x - startingPos.x,
 																		currentOffset.y - startingPos.y, 1));
 							transform = glm::translate(transform, glm::vec3(0.5, 0.5, 0));
 							golShader.setMat4("position", transform);
+							golShader.setFloat("borderWidth", 0);
+							glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
+							golShader.setVec3("color",
+											  glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) ? glm::vec3(0, 1, 0)
+																								 : glm::vec3(1, 0, 0));
 
 							glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0); // NOLINT(mod
 						},
