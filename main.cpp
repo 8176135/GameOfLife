@@ -301,6 +301,7 @@ int main() {
 	glfwSetWindowUserPointer(window, &context);
 
 	Shader golShader("vertex.glsl", "frag.glsl");
+	Shader screenShader("pp_vertex.glsl", "pp_frag.glsl");
 
 	const GLfloat vertices[] = {
 			// Positions,       Texture Coord
@@ -343,23 +344,51 @@ int main() {
 //
 //	glGenTextures(1, &mainTexId);
 //	glBindTexture(GL_TEXTURE_2D, mainTexId);
-//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
 
-	float borderColor[] = {0.0f, 0.0f, 0.0f, 0.5f};
-	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
 
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+//	float borderColor[] = {0.0f, 0.0f, 0.0f, 0.5f};
+//	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+//
+//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
 //	generateRandomArray(dataArray, DEFAULT_BOX_RESOLUTION);
 
 //	glGenerateMipmap(GL_TEXTURE_2D);
 
-	golShader.use();
+
+	GLuint fbo;
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+
+	unsigned int frameBufferTex;
+	glGenTextures(1, &frameBufferTex);
+	glBindTexture(GL_TEXTURE_2D, frameBufferTex);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WINDOW_SIZE, WINDOW_SIZE, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, frameBufferTex, 0);
+
+//	unsigned int rbo;
+//	glGenRenderbuffers(1, &rbo);
+//	glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+		std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+	}
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
 //	golShader.setInt("texture1", 0);
 //	golShader.setInt("resolution", DEFAULT_BOX_RESOLUTION);
 //    glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+	screenShader.use();
+	screenShader.setInt("screenTexture", 0);
 
 	int frameCounter = 0;
 	CustomGlfwTimer customGlfwTimer;
@@ -388,21 +417,23 @@ int main() {
 		}
 	}};
 
+	golShader.use();
 	glm::mat4 view = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
 	view = glm::translate(view, glm::vec3(0, 0, -1.0));
 	golShader.setMat4("view", view);
 
-	glClearColor(0.2f, 0.3f, 0.2f, 1);
 	/* Loop until the user closes the window */
 	while (!glfwWindowShouldClose(window)) {
-		/* Render here */
-		glClear(GL_COLOR_BUFFER_BIT);
 
 //		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, DEFAULT_BOX_RESOLUTION, DEFAULT_BOX_RESOLUTION, 0, GL_RGBA, GL_UNSIGNED_BYTE,
 //					 context.textureDataArray.data());
 
 //		glActiveTexture(GL_TEXTURE0);
 //		glBindTexture(GL_TEXTURE_2D, mainTexId);
+
+		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+		glClearColor(0.2f, 0.3f, 0.2f, 1);
+		glClear(GL_COLOR_BUFFER_BIT);
 
 		golShader.use();
 
@@ -413,7 +444,7 @@ int main() {
 
 		golShader.setMat4("projection", projection);
 		golShader.setVec3("color", glm::vec3(1));
-		golShader.setFloat("borderWidth", 0.1);
+		golShader.setFloat("borderWidth", 0);
 
 		glBindVertexArray(vaoId);
 
@@ -465,7 +496,7 @@ int main() {
 											  glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) ? glm::vec3(0, 1, 0)
 																								 : glm::vec3(1, 0, 0));
 
-							glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0); // NOLINT(mod
+							glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
 						},
 						[&](const DrawingMode::Pencil &pencil) {
 						},
@@ -474,6 +505,15 @@ int main() {
 				std::visit(visitor, context.currentDrawingMode);
 			}
 		}
+
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glClearColor(0.2f, 0.3f, 0.2f, 1);
+		glClear(GL_COLOR_BUFFER_BIT);
+
+		screenShader.use();
+//		glBindVertexArray(vaoId);
+		glBindTexture(GL_TEXTURE_2D, frameBufferTex);
+		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
 
 		context.uiLayer.RenderLayer();
 
