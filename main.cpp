@@ -262,7 +262,8 @@ int main() {
 	glfwSetErrorCallback(Callbacks::error_callback);
 
 	/* Create a windowed mode window and its OpenGL context */
-	glfwWindowHint(GLFW_SAMPLES, 8);
+//	glfwWindowHint(GLFW_SAMPLES, 8);
+	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 	GLFWwindow *window = glfwCreateWindow(WINDOW_SIZE, WINDOW_SIZE, "Hello World", nullptr, nullptr);
 	if (!window) {
 		glfwTerminate();
@@ -289,7 +290,7 @@ int main() {
 			.uiLayer = UiLayer(),
 	};
 
-	glEnable(GL_MULTISAMPLE);
+//	glEnable(GL_MULTISAMPLE);
 
 	glfwSwapInterval(1);
 	glfwSetKeyCallback(window, Callbacks::key_callback);
@@ -361,8 +362,23 @@ int main() {
 	glGenFramebuffers(1, &fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 
+	GLuint textureColorBufferMultiSampled;
+	glGenTextures(1, &textureColorBufferMultiSampled);
+	glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, textureColorBufferMultiSampled);
 
-	unsigned int frameBufferTex;
+	glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 8, GL_RGB, WINDOW_SIZE, WINDOW_SIZE, GL_TRUE);
+	glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, textureColorBufferMultiSampled, 0);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+		std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	GLuint intermediateFBO;
+	glGenFramebuffers(1, &intermediateFBO);
+	glBindFramebuffer(GL_FRAMEBUFFER, intermediateFBO);
+
+	GLuint frameBufferTex;
 	glGenTextures(1, &frameBufferTex);
 	glBindTexture(GL_TEXTURE_2D, frameBufferTex);
 
@@ -380,7 +396,7 @@ int main() {
 //	glBindRenderbuffer(GL_RENDERBUFFER, rbo);
 
 	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-		std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+		std::cout << "ERROR::FRAMEBUFFER:: Framebuffer 2 is not complete!" << std::endl;
 	}
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -393,11 +409,14 @@ int main() {
 	int frameCounter = 0;
 	CustomGlfwTimer customGlfwTimer;
 
+	bool other = false;
+
 	customGlfwTimer.register_timer(1, [&] {
 		std::cout << "Frames per second: " << frameCounter << std::endl;
 		// TODO: Probably should lock here, otherwise a swap could happen while accessing count, unlikely though.
 		std::cout << "Count: " << context.lifeExecutor.count() << std::endl;
 		frameCounter = 0;
+		other = !other;
 	});
 
 //	std::chrono::duration total_points = std::chrono::duration<long long int, std::nano>::zero();
@@ -422,6 +441,7 @@ int main() {
 	view = glm::translate(view, glm::vec3(0, 0, -1.0));
 	golShader.setMat4("view", view);
 
+
 	/* Loop until the user closes the window */
 	while (!glfwWindowShouldClose(window)) {
 
@@ -432,7 +452,7 @@ int main() {
 //		glBindTexture(GL_TEXTURE_2D, mainTexId);
 
 		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-		glClearColor(0.2f, 0.3f, 0.2f, 1);
+		glClearColor(0.1f, 0.1f, 0.1f, 1);
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		golShader.use();
@@ -458,6 +478,7 @@ int main() {
 					) {
 				glm::mat4 position = glm::mat4(1.0f);
 				position = glm::translate(position, glm::vec3(item.x, item.y, 0));
+				position = glm::scale(position, glm::vec3(0.9));
 				golShader.setMat4("position", position);
 
 				glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0); // NOLINT(mod
@@ -489,6 +510,7 @@ int main() {
 							transform = glm::scale(transform, glm::vec3(currentOffset.x - startingPos.x,
 																		currentOffset.y - startingPos.y, 1));
 							transform = glm::translate(transform, glm::vec3(0.5, 0.5, 0));
+
 							golShader.setMat4("position", transform);
 							golShader.setFloat("borderWidth", 0);
 							glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
@@ -505,6 +527,10 @@ int main() {
 				std::visit(visitor, context.currentDrawingMode);
 			}
 		}
+
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, intermediateFBO);
+		glBlitFramebuffer(0, 0, WINDOW_SIZE, WINDOW_SIZE, 0, 0, WINDOW_SIZE, WINDOW_SIZE, GL_COLOR_BUFFER_BIT, other ? GL_NEAREST : GL_LINEAR);
 
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glClearColor(0.2f, 0.3f, 0.2f, 1);
