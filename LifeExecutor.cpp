@@ -23,7 +23,8 @@ static unsigned int seed_val = 101;
 ////	return dataArray;
 //}
 
-static void generateRandomArray(std::unordered_set<Vector2<int>> &toSet, Vector2<int> bounds, int min, int max) {
+static void
+generateRandomArray(std::unordered_map<Vector2<int>, uint8_t> &toSet, Vector2<int> bounds, int min, int max) {
 	typedef std::mt19937 MyRngImpl;  // the Mersenne Twister with a popular choice of parameters
 	seed_val += 1;
 	MyRngImpl rng(seed_val);
@@ -33,16 +34,19 @@ static void generateRandomArray(std::unordered_set<Vector2<int>> &toSet, Vector2
 
 	for (int i = 0; i < range; ++i) {
 		auto pos = position_gen(rng);
-		toSet.insert(Vector2(pos / bounds.x, pos % bounds.x));
+		toSet.emplace(Vector2(pos / bounds.x, pos % bounds.x), 3);
 	}
 }
 
 LifeExecutor::LifeExecutor(int reserve_size) {
-	live_cells_a = std::unordered_set<Vector2<int>>(reserve_size);
-	live_cells_b = std::unordered_set<Vector2<int>>(reserve_size);
+	live_cells_a = std::unordered_map<Vector2<int>, uint8_t>(reserve_size);
+	live_cells_b = std::unordered_map<Vector2<int>, uint8_t>(reserve_size);
+	live_cells_c = std::unordered_map<Vector2<int>, uint8_t>(reserve_size);
+
 	neighbours = std::unordered_map<Vector2<int>, uint8_t>(reserve_size * 8);
 
-	last_cells = &live_cells_b;
+	last_cells = &live_cells_c;
+	mid_cells = &live_cells_b;
 	live_cells = &live_cells_a;
 
 	generateRandomArray(*live_cells, Vector2(DEFAULT_BOX_RESOLUTION, DEFAULT_BOX_RESOLUTION), 0,
@@ -60,20 +64,35 @@ void LifeExecutor::next_step() {
 					continue;
 				}
 
-				neighbours[Vector2(item.x + i1, item.y + i2)] += 1;
+				neighbours[Vector2(item.first.x + i1, item.first.y + i2)] += 1;
 			}
 		}
 	}
-	last_cells->clear();
+	mid_cells->clear();
 
 	for (const auto &item : neighbours) {
-		if (item.second == 3 || (item.second == 2 && live_cells->contains(item.first))) {
-			last_cells->insert(item.first);
+		if (item.second == 3) {
+			if (live_cells->contains(item.first)) { // If last step had stuff,
+				mid_cells->emplace(item.first, 1);
+			} else if (last_cells->contains(item.first)) { // If 2 steps ago it had stuff,
+				mid_cells->emplace(item.first, 2);
+			} else { // Brand new item
+				mid_cells->emplace(item.first, 3);
+			}
+		}
+
+		if (item.second == 2 && live_cells->contains(item.first)) {  // If last step had stuff,
+			mid_cells->emplace(item.first, 1);
 		}
 	}
+
 	{
 		std::scoped_lock sl{this->swap_lock};
-		std::swap(live_cells, last_cells);
+		// Rotate the cells
+		std::swap(live_cells, last_cells
+		);
+		std::swap(live_cells, mid_cells
+		);
 	}
 }
 
@@ -102,14 +121,14 @@ void LifeExecutor::randomize_field() {
 						DEFAULT_BOX_RESOLUTION * DEFAULT_BOX_RESOLUTION);
 }
 
-bool LifeExecutor::setBit( Vector2<int> pos, bool newValue) {
+bool LifeExecutor::setBit(Vector2<int> pos, bool newValue) {
 	auto retVal = live_cells->contains(pos);
 	if (retVal == newValue) {
 		return false;
 	}
 
 	if (newValue) {
-		live_cells->insert(pos);
+		live_cells->emplace(pos, 3);
 	} else {
 		live_cells->erase(pos);
 	}
@@ -121,7 +140,7 @@ unsigned long long LifeExecutor::count() {
 	return live_cells->size();
 }
 
-void LifeExecutor::iterate_over_cells(const std::function<void(const Vector2<int> &)>& to_execute) {
+void LifeExecutor::iterate_over_cells(const std::function<void(const std::pair<const Vector2<int>, uint8_t> &)> &to_execute) {
 	std::scoped_lock m{swap_lock};
 
 	for (const auto &item : *live_cells) {

@@ -302,6 +302,7 @@ int main() {
 	glfwSetWindowUserPointer(window, &context);
 
 	Shader golShader("vertex.glsl", "frag.glsl");
+	Shader blurShader("post_process_shaders/vert_blur.glsl", "post_process_shaders/frag_blur.glsl");
 	Shader screenShader("pp_vertex.glsl", "pp_frag.glsl");
 
 	const GLfloat vertices[] = {
@@ -358,17 +359,32 @@ int main() {
 //	glGenerateMipmap(GL_TEXTURE_2D);
 
 
-	GLuint fbo;
-	glGenFramebuffers(1, &fbo);
-	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	GLuint msaaFbo;
+	glGenFramebuffers(1, &msaaFbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, msaaFbo);
 
-	GLuint textureColorBufferMultiSampled;
-	glGenTextures(1, &textureColorBufferMultiSampled);
-	glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, textureColorBufferMultiSampled);
+	GLuint textureColorBufferMultiSampled[2];
+	glGenTextures(2, textureColorBufferMultiSampled);
 
-	glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 8, GL_RGB, WINDOW_SIZE, WINDOW_SIZE, GL_TRUE);
-	glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, textureColorBufferMultiSampled, 0);
+	for (int i = 0; i < 2; ++i) {
+		glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, textureColorBufferMultiSampled[i]);
+
+		glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 8, GL_RGBA16F, WINDOW_SIZE, WINDOW_SIZE, GL_TRUE);
+
+//		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+//		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+//		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+//		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D_MULTISAMPLE,
+							   textureColorBufferMultiSampled[i], 0);
+	}
+	GLuint attachments[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+	glDrawBuffers(2, attachments);
+//	glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, 8, GL_RGBA16F, WINDOW_SIZE, WINDOW_SIZE, GL_TRUE);
+//	glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, 0);
+//	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE,
+//						   textureColorBufferMultiSampled, 0);
 
 	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 		std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
@@ -378,18 +394,22 @@ int main() {
 	glGenFramebuffers(1, &intermediateFBO);
 	glBindFramebuffer(GL_FRAMEBUFFER, intermediateFBO);
 
-	GLuint frameBufferTex;
-	glGenTextures(1, &frameBufferTex);
-	glBindTexture(GL_TEXTURE_2D, frameBufferTex);
+	GLuint frameBufferTex[2];
+	glGenTextures(2, frameBufferTex);
+	for (int i = 0; i < 2; ++i) {
+		glBindTexture(GL_TEXTURE_2D, frameBufferTex[i]);
 
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WINDOW_SIZE, WINDOW_SIZE, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, WINDOW_SIZE, WINDOW_SIZE, 0, GL_RGBA, GL_FLOAT, nullptr);
 
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, frameBufferTex, 0);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, frameBufferTex[i], 0);
+	}
+
+	glDrawBuffers(2, attachments);
 
 //	unsigned int rbo;
 //	glGenRenderbuffers(1, &rbo);
@@ -400,23 +420,40 @@ int main() {
 	}
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+	GLuint pingpongFBO[2];
+	GLuint pingpongColorbuffers[2];
+	glGenFramebuffers(2, pingpongFBO);
+	glGenTextures(2, pingpongColorbuffers);
+	for (unsigned int i = 0; i < 2; i++) {
+		glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[i]);
+		glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[i]);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, WINDOW_SIZE, WINDOW_SIZE, 0, GL_RGBA, GL_FLOAT, nullptr);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
+						GL_CLAMP_TO_EDGE); // we clamp to the edge as the blur filter would otherwise sample repeated texture values!
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pingpongColorbuffers[i], 0);
+		// also check if framebuffers are complete (no need for depth buffer)
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+			std::cout << "Framebuffer not complete!" << std::endl;
+	}
+
 //	golShader.setInt("texture1", 0);
 //	golShader.setInt("resolution", DEFAULT_BOX_RESOLUTION);
 //    glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
-	screenShader.use();
-	screenShader.setInt("screenTexture", 0);
 
 	int frameCounter = 0;
 	CustomGlfwTimer customGlfwTimer;
 
-	bool other = false;
+//	bool other = false;
 
 	customGlfwTimer.register_timer(1, [&] {
 		std::cout << "Frames per second: " << frameCounter << std::endl;
 		// TODO: Probably should lock here, otherwise a swap could happen while accessing count, unlikely though.
 		std::cout << "Count: " << context.lifeExecutor.count() << std::endl;
 		frameCounter = 0;
-		other = !other;
+//		other = !other;
 	});
 
 //	std::chrono::duration total_points = std::chrono::duration<long long int, std::nano>::zero();
@@ -441,6 +478,12 @@ int main() {
 	view = glm::translate(view, glm::vec3(0, 0, -1.0));
 	golShader.setMat4("view", view);
 
+	blurShader.use();
+	blurShader.setInt("image", 0);
+
+	screenShader.use();
+	screenShader.setInt("screenTexture", 0);
+	screenShader.setInt("bloomTexture", 1);
 
 	/* Loop until the user closes the window */
 	while (!glfwWindowShouldClose(window)) {
@@ -451,8 +494,10 @@ int main() {
 //		glActiveTexture(GL_TEXTURE0);
 //		glBindTexture(GL_TEXTURE_2D, mainTexId);
 
-		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-		glClearColor(0.1f, 0.1f, 0.1f, 1);
+		glBindFramebuffer(GL_FRAMEBUFFER, msaaFbo);
+		glActiveTexture(GL_TEXTURE0);
+//		glBindFramebuffer(GL_FRAMEBUFFER, intermediateFBO);
+		glClearColor(0, 0, 0, 1);
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		golShader.use();
@@ -468,18 +513,19 @@ int main() {
 
 		glBindVertexArray(vaoId);
 
-		context.lifeExecutor.iterate_over_cells([&](const Vector2i &item) {
+		context.lifeExecutor.iterate_over_cells([&](const std::pair<const Vector2<int>, uint8_t> &item) {
 			// calculate the model matrix for each object and pass it to shader before drawing
 
-			if (context.renderWindow.top_left.x - 1 < item.x
-				&& context.renderWindow.bottom_right.x + 1 > item.x
-				&& context.renderWindow.top_left.y - 1 < item.y
-				&& context.renderWindow.bottom_right.y + 1 > item.y
+			if (context.renderWindow.top_left.x - 1 < item.first.x
+				&& context.renderWindow.bottom_right.x + 1 > item.first.x
+				&& context.renderWindow.top_left.y - 1 < item.first.y
+				&& context.renderWindow.bottom_right.y + 1 > item.first.y
 					) {
-				glm::mat4 position = glm::mat4(1.0f);
-				position = glm::translate(position, glm::vec3(item.x, item.y, 0));
-				position = glm::scale(position, glm::vec3(0.9));
-				golShader.setMat4("position", position);
+				glm::mat4 transform = glm::mat4(1.0f);
+				transform = glm::translate(transform, glm::vec3(item.first.x, item.first.y, 0));
+				transform = glm::scale(transform, glm::vec3(0.9));
+				golShader.setMat4("transform", transform);
+				golShader.setVec3("color", glm::vec3(std::lerp(0.7f, 1.3f, (item.second - 1) * 0.5f)));
 
 				glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0); // NOLINT(mod
 			}
@@ -511,7 +557,7 @@ int main() {
 																		currentOffset.y - startingPos.y, 1));
 							transform = glm::translate(transform, glm::vec3(0.5, 0.5, 0));
 
-							golShader.setMat4("position", transform);
+							golShader.setMat4("transform", transform);
 							golShader.setFloat("borderWidth", 0);
 							glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
 							golShader.setVec3("color",
@@ -528,17 +574,49 @@ int main() {
 			}
 		}
 
-		glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+		// Blit both color attachments
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, msaaFbo);
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, intermediateFBO);
-		glBlitFramebuffer(0, 0, WINDOW_SIZE, WINDOW_SIZE, 0, 0, WINDOW_SIZE, WINDOW_SIZE, GL_COLOR_BUFFER_BIT, other ? GL_NEAREST : GL_LINEAR);
 
+		glDrawBuffer(GL_COLOR_ATTACHMENT0);
+		glReadBuffer(GL_COLOR_ATTACHMENT0);
+
+		glBlitFramebuffer(0, 0, WINDOW_SIZE, WINDOW_SIZE, 0, 0, WINDOW_SIZE, WINDOW_SIZE, GL_COLOR_BUFFER_BIT,
+						  GL_LINEAR);
+
+		glDrawBuffer(GL_COLOR_ATTACHMENT1);
+		glReadBuffer(GL_COLOR_ATTACHMENT1);
+
+		glBlitFramebuffer(0, 0, WINDOW_SIZE, WINDOW_SIZE, 0, 0, WINDOW_SIZE, WINDOW_SIZE, GL_COLOR_BUFFER_BIT,
+						  GL_LINEAR);
+
+		bool horizontal = true, first_iteration = true;
+		unsigned int amount = 20;
+		blurShader.use();
+		for (unsigned int i = 0; i < amount; i++) {
+			glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[horizontal]);
+			blurShader.setInt("horizontal", horizontal);
+			glBindTexture(GL_TEXTURE_2D, first_iteration ? frameBufferTex[1]
+														 : pingpongColorbuffers[!horizontal]);  // bind texture of other framebuffer (or scene if first iteration)
+			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+
+			horizontal = !horizontal;
+			if (first_iteration)
+				first_iteration = false;
+		}
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
 		glClearColor(0.2f, 0.3f, 0.2f, 1);
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		screenShader.use();
-//		glBindVertexArray(vaoId);
-		glBindTexture(GL_TEXTURE_2D, frameBufferTex);
+
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, frameBufferTex[0]);
+
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[!horizontal]);
+
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
 
 		context.uiLayer.RenderLayer();

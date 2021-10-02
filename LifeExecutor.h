@@ -27,7 +27,7 @@ public:
 
 	unsigned long long count();
 
-	void iterate_over_cells(const std::function<void(const Vector2<int>&)>& to_execute);
+	void iterate_over_cells(const std::function<void(const std::pair<const Vector2<int>, uint8_t> &)>& to_execute);
 //	const std::unordered_set<Vector2<int>> &live_cells_get();
 
 	// TODO: Fix this shortcut
@@ -36,10 +36,14 @@ public:
 
 private:
 	std::unordered_map<Vector2<int>, uint8_t> neighbours;
-	std::unordered_set<Vector2<int>> live_cells_a;
-	std::unordered_set<Vector2<int>> live_cells_b;
-	std::unordered_set<Vector2<int>>* live_cells;
-	std::unordered_set<Vector2<int>>* last_cells;
+
+	std::unordered_map<Vector2<int>, uint8_t> live_cells_a;
+	std::unordered_map<Vector2<int>, uint8_t> live_cells_b;
+	std::unordered_map<Vector2<int>, uint8_t> live_cells_c;
+
+	std::unordered_map<Vector2<int>, uint8_t>* live_cells;
+	std::unordered_map<Vector2<int>, uint8_t>* last_cells;
+	std::unordered_map<Vector2<int>, uint8_t>* mid_cells;
 
 	std::mutex swap_lock;
 };
