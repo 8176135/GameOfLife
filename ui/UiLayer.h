@@ -19,9 +19,10 @@ enum class ButtonState {
 
 struct ButtonInfo {
 	glm::mat4 elementTransform;
-	std::function<void(CallbackContext &)> callback;
+	std::function<void(CallbackContext &, ButtonInfo &)> callback;
 	ButtonState currentState;
 	std::unordered_set<int> mouseButtonDown;
+	glm::vec3 color;
 //	TextureData ,
 };
 

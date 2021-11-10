@@ -1,3 +1,5 @@
+// This is an open source non-commercial project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: https://pvs-studio.com
 //
 // Created by username on 22/09/2021.
 //
@@ -15,9 +17,9 @@ UiLayer::UiLayer() : uiShader(Shader("ui/vertex_ui.glsl", "ui/frag_ui.glsl")) {
 	transform = glm::scale(transform, glm::vec3(0.1, 0.1, 1));
 	transform = glm::translate(transform, glm::vec3(0.5, -0.5, 0));
 
-	this->buttons.push_back(ButtonInfo{
+	this->buttons.emplace_back(ButtonInfo{
 			.elementTransform = transform,
-			.callback = [](CallbackContext &context) {
+			.callback = [](CallbackContext &context, ButtonInfo &btn) {
 				if (std::holds_alternative<DrawingMode::Box>(context.currentDrawingMode)) {
 					context.currentDrawingMode = DrawingMode::Pencil{};
 				} else if (std::holds_alternative<DrawingMode::Pencil>(context.currentDrawingMode)) {
@@ -25,6 +27,27 @@ UiLayer::UiLayer() : uiShader(Shader("ui/vertex_ui.glsl", "ui/frag_ui.glsl")) {
 				}
 			},
 			.currentState = ButtonState::None,
+			.color = glm::vec3(0.0, 0.0, 1.0)
+	});
+
+	transform = glm::mat4(1.0f);
+	transform = glm::translate(transform, glm::vec3(-0.7, 0.9, 0));
+	transform = glm::scale(transform, glm::vec3(0.1, 0.1, 1));
+	transform = glm::translate(transform, glm::vec3(0.5, -0.5, 0));
+
+	this->buttons.emplace_back(ButtonInfo{
+			.elementTransform = transform,
+			.callback = [](CallbackContext &context, ButtonInfo &btn) {
+				context.currentlyPlaying = !context.currentlyPlaying;
+				// TODO: Update colors when pressing space
+				if (context.currentlyPlaying) {
+					btn.color = glm::vec3(0.0, 1.0, 0.0);
+				} else {
+					btn.color = glm::vec3(1.0, 0.0, 0.0);
+				}
+			},
+			.currentState = ButtonState::None,
+			.color = glm::vec3(1.0, 0.0, 0.0)
 	});
 }
 
@@ -48,6 +71,7 @@ void UiLayer::RenderLayer() {
 		}
 
 		uiShader.setVec3("tint", tintVal);
+		uiShader.setVec3("baseColor", item.color);
 
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0); // NOLINT(mod
 	}
@@ -76,7 +100,7 @@ bool UiLayer::clickButtonCheck(CallbackContext &context, double xpos, double ypo
 			button.mouseButtonDown.insert(mouseButton);
 			button.currentState = ButtonState::Active;
 		} else if (wasPressed) {
-			button.callback(context);
+			button.callback(context, button);
 			if (button.mouseButtonDown.empty()) {
 				// Still on the button
 				button.currentState = ButtonState::Hover;

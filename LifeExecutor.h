@@ -15,6 +15,11 @@
 #include "cstdint"
 #include "RenderWindow.h"
 
+struct IterateCellParams {
+	Vector2<int> coord;
+	char8_t freshness;
+};
+
 class LifeExecutor {
 public:
 	explicit LifeExecutor(int reserve_size);
@@ -27,7 +32,7 @@ public:
 
 	unsigned long long count();
 
-	void iterate_over_cells(const std::function<void(const std::pair<const Vector2<int>, uint8_t> &)>& to_execute);
+	void iterate_over_cells(const std::function<void(const IterateCellParams &)>& to_execute);
 //	const std::unordered_set<Vector2<int>> &live_cells_get();
 
 	// TODO: Fix this shortcut

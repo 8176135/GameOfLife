@@ -4,8 +4,9 @@ in vec2 TexCoord;
 
 uniform sampler2D texture1;
 uniform vec3 tint;
+uniform vec3 baseColor;
 
 void main()
 {
-    FragColor = vec4(tint, 1) * vec4(1, 0, 0, 1) ;
+    FragColor = vec4(tint, 1) * vec4(baseColor, 1);
 }

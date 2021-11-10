@@ -1,3 +1,5 @@
+// This is an open source non-commercial project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: https://pvs-studio.com
 //
 // Created by username on 12/09/2021.
 //
@@ -7,7 +9,7 @@
 
 void CustomGlfwTimer::tick() {
 	auto currentTime = glfwGetTime();
-	for (unsigned int i = 0; i < intervals.size(); ++i) {
+	for (size_t i = 0; i < intervals.size(); ++i) {
 		auto interval = std::get<0>(intervals[i]);
 		if (oldTimes[i] + interval < currentTime) {
 			oldTimes[i] = currentTime;

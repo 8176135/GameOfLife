@@ -1,3 +1,5 @@
+// This is an open source non-commercial project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: https://pvs-studio.com
 #include <cmath>
 #include <iostream>
 #include "glad/glad.h"
@@ -43,8 +45,14 @@ template<class... Ts>
 struct overload : Ts ... {
 	using Ts::operator()...;
 };
+
 template<class... Ts>
 overload(Ts...) -> overload<Ts...>;
+
+
+void renderCells(CallbackContext &context, Shader &golShader);
+
+void renderUserDrawGuide(GLFWwindow *window, const CallbackContext &context, Shader &golShader);
 
 CallbackContext *get_context(GLFWwindow *w) {
 	return static_cast<CallbackContext *>(glfwGetWindowUserPointer(w));
@@ -77,12 +85,12 @@ static std::optional<glm::vec2> getMappedCursorPos(CallbackContext const &contex
 
 
 namespace Callbacks {
-	static void error_callback([[maybe_unused]] int error, const char *description) {
+	void error_callback([[maybe_unused]] int error, const char *description) {
 		std::cerr << "Error: " << description << std::endl;
 	}
 
-	static void key_callback(GLFWwindow *window, int key, [[maybe_unused]] int scancode, int action,
-							 [[maybe_unused]] int mods) {
+	void key_callback(GLFWwindow *window, int key, [[maybe_unused]] int scancode, int action,
+					  [[maybe_unused]] int mods) {
 		if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 			glfwSetWindowShouldClose(window, GLFW_TRUE);
 
@@ -111,7 +119,7 @@ namespace Callbacks {
 		}
 	}
 
-	static void cursor_position_callback(GLFWwindow *window, double xpos, double ypos) {
+	void cursor_position_callback(GLFWwindow *window, double xpos, double ypos) {
 		CallbackContext &context = *get_context(window);
 		auto noOffsetMappedPos = getMappedCursorPos(context, xpos, ypos);
 
@@ -264,7 +272,7 @@ int main() {
 	/* Create a windowed mode window and its OpenGL context */
 //	glfwWindowHint(GLFW_SAMPLES, 8);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-	GLFWwindow *window = glfwCreateWindow(WINDOW_SIZE, WINDOW_SIZE, "Hello World", nullptr, nullptr);
+	GLFWwindow *window = glfwCreateWindow(WINDOW_SIZE, WINDOW_SIZE, "Game Of Life With Bloom", nullptr, nullptr);
 	if (!window) {
 		glfwTerminate();
 		return -1;
@@ -297,7 +305,6 @@ int main() {
 	glfwSetMouseButtonCallback(window, Callbacks::mouse_button_callback);
 	glfwSetCursorPosCallback(window, Callbacks::cursor_position_callback);
 	glfwSetScrollCallback(window, Callbacks::scroll_callback);
-
 
 	glfwSetWindowUserPointer(window, &context);
 
@@ -503,7 +510,7 @@ int main() {
 		golShader.use();
 
 
-		glm::mat4 projection = glm::mat4(1.0f);
+		glm::mat4 projection;
 		projection = glm::ortho(context.renderWindow.top_left.x, context.renderWindow.bottom_right.x,
 								context.renderWindow.bottom_right.y, context.renderWindow.top_left.y, 0.1f, 100.0f);
 
@@ -513,66 +520,8 @@ int main() {
 
 		glBindVertexArray(vaoId);
 
-		context.lifeExecutor.iterate_over_cells([&](const std::pair<const Vector2<int>, uint8_t> &item) {
-			// calculate the model matrix for each object and pass it to shader before drawing
-
-			if (context.renderWindow.top_left.x - 1 < item.first.x
-				&& context.renderWindow.bottom_right.x + 1 > item.first.x
-				&& context.renderWindow.top_left.y - 1 < item.first.y
-				&& context.renderWindow.bottom_right.y + 1 > item.first.y
-					) {
-				glm::mat4 transform = glm::mat4(1.0f);
-				transform = glm::translate(transform, glm::vec3(item.first.x, item.first.y, 0));
-				transform = glm::scale(transform, glm::vec3(0.9));
-				golShader.setMat4("transform", transform);
-				golShader.setVec3("color", glm::vec3(std::lerp(0.7f, 1.3f, (item.second - 1) * 0.5f)));
-
-				glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0); // NOLINT(mod
-			}
-		});
-		{
-			double xpos, ypos;
-			glfwGetCursorPos(window, &xpos, &ypos);
-			auto mappedPos = getMappedCursorPos(context, xpos, ypos);
-			if (mappedPos.has_value()) {
-				auto mappedPosOffset = convertToOffsetPos(context, mappedPos.value());
-				auto visitor = overload{
-						[&](DrawingMode::Box &box) {
-							if (!box.startingPos.has_value()) {
-								return;
-							}
-							auto currentOffset = mappedPosOffset + Vector2i(1);
-							auto startingPos = box.startingPos.value();
-							if (currentOffset.x < startingPos.x) {
-								std::swap(currentOffset.x, startingPos.x);
-							}
-							if (currentOffset.y < startingPos.y) {
-								std::swap(currentOffset.y, startingPos.y);
-							}
-
-							glm::mat4 transform = glm::mat4(1.0f);
-							transform = glm::translate(transform,
-													   glm::vec3(startingPos.x - 0.5, startingPos.y - 0.5, 0));
-							transform = glm::scale(transform, glm::vec3(currentOffset.x - startingPos.x,
-																		currentOffset.y - startingPos.y, 1));
-							transform = glm::translate(transform, glm::vec3(0.5, 0.5, 0));
-
-							golShader.setMat4("transform", transform);
-							golShader.setFloat("borderWidth", 0);
-							glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
-							golShader.setVec3("color",
-											  glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) ? glm::vec3(0, 1, 0)
-																								 : glm::vec3(1, 0, 0));
-
-							glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
-						},
-						[&](const DrawingMode::Pencil &pencil) {
-						},
-				};
-
-				std::visit(visitor, context.currentDrawingMode);
-			}
-		}
+		renderCells(context, golShader);
+		renderUserDrawGuide(window, context, golShader);
 
 		// Blit both color attachments
 		glBindFramebuffer(GL_READ_FRAMEBUFFER, msaaFbo);
@@ -634,4 +583,69 @@ int main() {
 	lifePlayerThread.join();
 	glfwTerminate();
 	return 0;
+}
+
+void renderUserDrawGuide(GLFWwindow *window, const CallbackContext &context, Shader &golShader) {
+	double xpos, ypos;
+	glfwGetCursorPos(window, &xpos, &ypos);
+	auto mappedPos = getMappedCursorPos(context, xpos, ypos);
+	if (mappedPos.has_value()) {
+		auto mappedPosOffset = convertToOffsetPos(context, mappedPos.value());
+		auto visitor = overload{
+				[&](DrawingMode::Box &box) {
+					if (!box.startingPos.has_value()) {
+						return;
+					}
+					auto currentOffset = mappedPosOffset + Vector2i(1);
+					auto startingPos = box.startingPos.value();
+					if (currentOffset.x < startingPos.x) {
+						std::swap(currentOffset.x, startingPos.x);
+					}
+					if (currentOffset.y < startingPos.y) {
+						std::swap(currentOffset.y, startingPos.y);
+					}
+
+					glm::mat4 transform = glm::mat4(1.0f);
+					transform = glm::translate(transform,
+											   glm::vec3(startingPos.x - 0.5, startingPos.y - 0.5, 0));
+					transform = glm::scale(transform, glm::vec3(currentOffset.x - startingPos.x,
+																currentOffset.y - startingPos.y, 1));
+					transform = glm::translate(transform, glm::vec3(0.5, 0.5, 0));
+
+					golShader.setMat4("transform", transform);
+					golShader.setFloat("borderWidth", 0);
+					glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
+					golShader.setVec3("color",
+									  glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) ? glm::vec3(0, 1, 0)
+																						 : glm::vec3(1, 0, 0));
+
+					glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+				},
+				[&](const DrawingMode::Pencil &pencil) {
+				},
+		};
+
+		auto currentDrawingMode = context.currentDrawingMode; // Requires this extra assignment for some reason,
+		std::visit(visitor, currentDrawingMode);
+	}
+}
+
+void renderCells(CallbackContext &context, Shader &golShader) {
+	context.lifeExecutor.iterate_over_cells([&](const IterateCellParams &item) {
+		// calculate the model matrix for each object and pass it to shader before drawing
+
+		if (context.renderWindow.top_left.x - 1 < (float) item.coord.x
+			&& context.renderWindow.bottom_right.x + 1 > (float) item.coord.x
+			&& context.renderWindow.top_left.y - 1 < (float) item.coord.y
+			&& context.renderWindow.bottom_right.y + 1 > (float) item.coord.y
+				) {
+			glm::mat4 transform = glm::mat4(1.0f);
+			transform = glm::translate(transform, glm::vec3(item.coord.x, item.coord.y, 0));
+			transform = glm::scale(transform, glm::vec3(0.9));
+			golShader.setMat4("transform", transform);
+			golShader.setVec3("color", glm::vec3(std::lerp(0.7f, 1.3f, ((float) item.freshness - 1) * 0.5f)));
+
+			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0); // NOLINT(mod
+		}
+	});
 }

@@ -1,3 +1,5 @@
+// This is an open source non-commercial project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: https://pvs-studio.com
 //
 // Created by username on 12/09/2021.
 //
@@ -8,20 +10,6 @@
 #include "main.h"
 
 static unsigned int seed_val = 101;
-
-//static void generateRandomArray(uint8_t *array, unsigned long long size) {
-//	typedef std::mt19937 MyRngImpl;  // the Mersenne Twister with a popular choice of parameters
-//	seed_val += 1;
-//	MyRngImpl rng(seed_val);
-//	std::uniform_int_distribution<uint8_t> uint_dist(0, 1);
-//
-////	auto *dataArray = new uint8_t[128 * 128 * 4];
-//	std::generate(array, array + size, [&] {
-//		return uint_dist(rng);
-//	});
-//
-////	return dataArray;
-//}
 
 static void
 generateRandomArray(std::unordered_map<Vector2<int>, uint8_t> &toSet, Vector2<int> bounds, int min, int max) {
@@ -140,10 +128,13 @@ unsigned long long LifeExecutor::count() {
 	return live_cells->size();
 }
 
-void LifeExecutor::iterate_over_cells(const std::function<void(const std::pair<const Vector2<int>, uint8_t> &)> &to_execute) {
+void LifeExecutor::iterate_over_cells(const std::function<void(const IterateCellParams &)> &to_execute) {
 	std::scoped_lock m{swap_lock};
 
 	for (const auto &item : *live_cells) {
-		to_execute(item);
+		to_execute(IterateCellParams {
+			.coord = item.first,
+			.freshness = item.second,
+		});
 	}
 }
